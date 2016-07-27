@@ -1,4 +1,4 @@
-#!/bin/bash/env python
+#!/usr//bin/env python
 #-*- coding:utf-8 -*-
 '''
 linux 定时任务分两种,使用crond设定，每分钟检测，分钟级别的定时任务，低于分钟级别的定时任务需要自己写脚本实现
@@ -91,3 +91,41 @@ oldboy 画图 http://oldboy.blog.51cto.com/2561410/1180894
 问题实例
 创建文件提示‘no space left on device'
     磁盘block满了或inode满了
+
+strace命令跟踪某命令
+
+crontab定时任务问题总结：
+1、export变量问题
+    crontab执行shell时只能识别为数不多的系统环境变量，一般用户定义的普通变量是无法识别的，如果在编写脚本中需要使用这些变量，最好使用export重新声明下该变量，脚本才能正常执行,例如生产情况和java相关的脚本任务和脚本
+2、任务路径问题
+    crontab执行shell命令时或shell脚本里面要使用绝对路径，如果是相对路径，就会找不到
+3、脚本权限问题
+    忘记给脚本加执行权限，导致定时任务无法执行，最佳方法是执行脚本前加/bin/sh 
+4、时间变量问题
+    ‘%’ 在crontab任务重被认为是newline.需要使用转义符\来转义，如果写在脚本中就不需要了
+5、>/dev/null 2>&1 问题
+    当定时任务在你指定的时间执行后，系统会寄一封信给你，显示该程式执行的内容，若系统未开启邮件服务就会导致邮件临时目录/var/spool/clientmqueue 碎文件逐渐增多，以至于大量消耗inode数量，如果需要打印日志输出，也可以追加到指定的日志文件里面，尽量不要留空，如果任务本身是命令的话，添加>/dev/null 2>&1要慎重
+6、定时任务加注释
+7、使用脚本程序代替命令
+8、避免不必要的程序输出
+
+生产环境优化和定时任务相关的内容
+1、添加普通用户，通过/etc/sudoers  授权管理
+2、更改默认的ssh服务端口及禁止root用户远程连接
+3、定时自动更新服务器时间
+4、配置yum更新源，从国内更新源下载rpm包
+5、关闭selinux及iptables(iptables工作场景如果有wan ip 一般要打开，高并发除外)
+6、调整文件描述符的数量
+7、定时自动清理/var/spool/clientmqueue/目录垃圾文件，防止inode 节点被占满（centos6.4默认没有sendmail,可以不配）
+8、精简开机自启服务（crond，sshd,network,syslog(rsyslog)）
+9、linux内核参数优化/etc/sysctl.conf,sysctl -p 生效
+10、更改字符集，支持中文，但建议还是英文字符集，防止乱码
+11、锁定关键系统文件 
+    chattr +i /etc/passwd
+    chattr +i /etc/shadow
+    chattr +i /etc/group
+    chattr +i /etc/gshadow
+    chattr +i /etc/inittab
+    处理以上内容后把chattr 改名字 ，就安全多了
+12、清空/etc/issue,去除系统及内核版本登录前的屏幕显示
+更多优化细节见 http://oldboy.blog.51cto.com/2561410/988726
