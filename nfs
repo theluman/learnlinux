@@ -27,5 +27,121 @@ RPC如何知道NFS的端口
 客户端 需要RPC服务进程，不需要NFS服务进程
 服务端 需要RPC服务进程，需要NFS服务进程
 
+cat /etc/redhat-release  看系统发行版本
+uname -n
+uname -r
+uname -m
+uname -a
 
-        
+软件两个：
+sudo yum install nfs-utils  即可同时安装portmap rpcbind
+
+1、nfs-utils   NFS主程序
+    包括rpc.nfsd、rpc.mountd、两个daemons 和相关文档说明及执行命令的文件等
+2、portman: centos5.X 下面的RPC主程序（centos6.4下为rpcbind）
+    nfs可以被视为一个rpc程序，在启动任何一个rpc程序之前，需要做好端口映射工作，这个映射工作就是有portman(或rpcbind)服务来完成，因此 NFS服务启动前必须先启动portmap服务
+
+查看默认软件包
+
+rpm -aq nfs-utils portman  或rpm -aq nfs-utils rpcbind
+
+启动nfs服务
+启动portmap(centos6.x下为rpcbind)
+    nfs服务都是基于rpc协议（使用的端口号111），所以先要确保portmap(或rpcbind)服务已经启动
+service portmap(或rpcbind) status 查看状态
+service portmap(或rpcbind) start
+service portmap(或rpcbind) status
+
+rpcinfo -p localhost  查看rpc信息
+
+启动nfs
+sudo service nfs status
+sudo service nfs start
+sudo service nfs status
+rpcinfo -p localhost  查看nfs向rpc注册的端口信息
+
+ps -ef 查看进程
+ps -ef |egrep "rpc|nfs" 多过滤
+
+    nfs服务的主要任务是进行文件共享，文件系统共享与权限有关，所以nfs服务启动时最少需要两个daemons,一个管理client端是否能够登入的问题，另一个管理client能够取得权限，如果还需要quota的话，还要加载rpc.rquotad程序
+
+[dean@6.4-121 ~]$ps -ef |egrep "rpc|nfs"
+rpc       1398     1  0 12:45 ?        00:00:00 rpcbind
+root      1494     2  0 12:50 ?        00:00:00 [rpciod/0]
+root      1502     1  0 12:50 ?        00:00:00 rpc.mountd
+root      1508     2  0 12:50 ?        00:00:00 [nfsd4]
+root      1509     2  0 12:50 ?        00:00:00 [nfsd4_callbacks]
+root      1510     2  0 12:50 ?        00:00:00 [nfsd]
+root      1511     2  0 12:50 ?        00:00:00 [nfsd]
+root      1512     2  0 12:50 ?        00:00:00 [nfsd]
+root      1513     2  0 12:50 ?        00:00:00 [nfsd]
+root      1514     2  0 12:50 ?        00:00:00 [nfsd]
+root      1515     2  0 12:50 ?        00:00:00 [nfsd]
+root      1516     2  0 12:50 ?        00:00:00 [nfsd]
+root      1517     2  0 12:50 ?        00:00:00 [nfsd]
+root      1540     1  0 12:50 ?        00:00:00 rpc.idmapd
+dean      1578  1214  0 12:56 pts/0    00:00:00 egrep rpc|nfs
+
+1、nfsd(rpc.nfsd)
+    这个daemon（守护进程）的主要功能是管理client端是否能够登入主机，其中还包含登入者的ID判别
+2、rpc.mountd
+    这个daemon 的主要功能是管理nfs的文件系统，当client端顺利通过rpc.nfsd登入主机后，在它可以使用nfs服务器提供数据前，还会经过文件使用权限（就是-rwxrwxrwx与owner,group那几个权限）的认证程序，它会去读nfs的配置文件/etc/exports来对比client的权限，当通过这一关后，client端就可以取得nfs文件的权限,注意，这个文件也是我们用来管理nfs共享目录的使用权限与安全的设置的地方
+3、nfs 启动 的rpc daemons
+    nfs启动时想rpc注册，所以nfs服务器被称为rpc server 之一，那么nfs是关于文件系统的服务，文件系统与权限有关，所以至少需要两个daemons
+    a.rpc.nfsd  控制客户端是否能够登入问题
+    b.rpc.mountd 管理客户端能够取得的权限认证程序，它会读取nfs配置文件 /etc/exports 来比对客户端的权限
+    c.rpc.lockd( 非必要) 可用来解锁文件，用于多客户端同时写入
+    d.rpc.statd(非必要) 检查文件的一致性，与rpc.lockd有关 c,d两个服务需要客户端服务端同时开启才行
+
+小技巧：对于使用rpm包安装的软件，命令service nfs start的启动方式等同于/etc/init.d/nfs start  但推荐/etc/init.d/nfs start 原因是可以使用tab补全，而service 则需要完全手敲，适用于大多数用rpm包安装的其他软件的启动
+
+
+配置nfs等服务开启启动
+chkconfig nfs on
+chkconfig portmap(rpcbind) on
+工作中不建议这样直接设置，要把启动命令放到/etc/rc.local 中，全部开机启动命令都这样放，好管理
+    vim /etc/rc.local
+lrwxrwxrwx. 1 root root 13 Jul 29 13:37 /etc/rc.local -> rc.d/rc.local
+        #描述信息
+        /etc/init.d/portman(rpcbind) start
+        /etc/init.d/nfs start
+
+规范  
+/rc.d/rc.local 需要备份，定时任务需要备份
+开机任务统一放到/etc/rc.d/rc.local
+
+
+查看结果
+    chkconfig --list nfs
+    chkconfig --list portmap(rpcbind)
+
+配置nfs配置文件
+nfs默认配置文件在 /etc/exports
+    centos上nfs默认配置文件是存在的，但内容为空，需要自行配置内容，有的linux发行版可能不提供/etc/exports 需要手动创建
+exports文件格式
+    /etc/exports 文件格式：
+nfs服务端共享目录 nfs客户端地址1（参1，参2。。。）客户端地址2（参1，参2。。。）
+    man exports
+1、nfs共享的目录  服务端的共享的实际目录，使用绝对地址
+2、客户端地址   可以为单独的ip地址 或者主机名，域名等，也可以为整个网段地址，还可以用‘*’ 匹配所有客户端服务器可以访问，这里所谓的客户端一般来说是前端的业务服务器，例如 web服务
+3、参数集  对授权的客户端的访问权限设置
+
+表格说明
+    客户端地址              具体例子                说明
+授权单一客户端访问nfs       10.0.0.30           一般情况下，生产环境中此配置不多
+授权整个网段可访问nfs       10.0.0.20/24        其中24等同于255.255.255.0，指定网段为生产环境中常用配置
+授权某个域名的客户端访问    nfs.dean.com         一般不用，不安全
+授权整个域名客户端访问      *.dean.com         一般不用，不安全
+
+生产环境常见配置实例：
+常用格式        要共享的目录    客户端ip或ip段(参1，参2...)
+配置1           /data/bbs 10.0.0.0/24(rw,sync)
+配置2           /home/ryan 10.0.0.0/24(rw,sync,all_squash,anonuid=2000,anongid=2000) 适合多客户端共享一个目录
+配置3           /home/dean 10.0.0.15(ro) 只读共享 生产环境中可能用于给开发提供某个测试服务器查看某个正式服务器数据的能力
+r读 w写 sync数据同步写入内存和磁盘中
+
+
+nfs权限配置实例 
+服务端共享 /dean  给整个192.168.1.0/24 整个网段的主机可读写
+
+
