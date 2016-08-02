@@ -142,6 +142,61 @@ r读 w写 sync数据同步写入内存和磁盘中
 
 
 nfs权限配置实例 
-服务端共享 /dean  给整个192.168.1.0/24 整个网段的主机可读写
+服务端共享 /deannfs/dean  给整个192.168.1.0/24 整个网段的主机可读写
+[root@6.4-121-server ~]#mkdir -p /deannfs/dean
+[root@6.4-121-server ~]#echo '/deannfs/dean 192.168.1.0/24(rw,sync)' >> /etc/exports 
+[root@6.4-121-server ~]#/etc/init.d/nfs reload
+[root@6.4-121-server ~]#/etc/init.d/iptables stop
+iptables: Flushing firewall rules:                         [  OK  ]
+iptables: Setting chains to policy ACCEPT: filter          [  OK  ]
+iptables: Unloading modules:                               [  OK  ]
+[root@6.4-121-server ~]#chmod -R 权限 /deannfs/dean
+
+[dean@6.4-122-client ~]$sudo showmount -e 192.168.1.121
+Export list for 192.168.1.121:
+/deannfs/dean 192.168.1.0/24
+[dean@6.4-122-client ~]$
+[dean@6.4-122-client ~]$sudo mount -t nfs 192.168.1.121:/deannfs/dean /opt
+
+centos5版本默认创建文件属主属组为nfsnobody
+注意centos6版本较5版本变化了，默认创建共享文件的属主组为nobody，不是nfsnobody,解决办法
+使用低版本方式挂载：
+mount -t nfs -o vers=3 192.168.1.121:/deannfs/dean /opt
+或者修改服务端配置文件 /etc/idmapd.conf,可谷歌，具体修改#Domain = local.domain.edu 取消，注释，设置具体主机名，服务端客户端保持一样
+
+如果觉得nfsnobody 不安全，可以创建一个用户，然后在/etc/exports 里面
+/deannfs/dean 192.168.1.121(rw,sync,anonuid=2000,anongid=2000) 
+重新加载配置文件 
+cat /var/lib/nfs/etab 查看
 
 
+nfs /etc/exports 参数重点
+
+    rw   可读写
+    ro   只读
+    sync 请求写入数据时，数据从内存缓存同步写入到nfs server的硬盘后才返回
+    async 请求写入数据时，先返回请求，在将数据写入到内存缓存和硬盘中，此参数可以提升nfs性能，但是会降低数据的安全，一般非高并发情况，不建议用
+    root_squash 访问nfs server共享目录的用户如果是root的话，它对该共享目录具有root权限，这个配置原本为无盘客户端准备的，应该避免使用！
+    root_squash 对于访问nfs server共享目录的用户如果是root的话，则它的权限将被压缩成匿名用户，同时它的uid,gid通常会变成nobody或nfsnobody
+    all_squash  不管访问nfs server共享目录的用户身份如何，它的权限都将被压缩成匿名用户，同时它的uid和gid都会变成nobody或nfsnobody,在多个nfs客户端同时读写nfs server数据时，这个参数很有用
+    anonuid  参数以anon* 开头即指anonymous匿名用户，这个用户的uid设置值通常为nobody或nfsnobody的uid值，当然我们也可以自行设置这个uid值，但是uid必须存在于/etc/passwd 中，在多个nfs clients时，如多台web server 共享一个nfs目录时，通过这个参数可以使得不同的nfs clients 写入的数据对所有nfs clients 保持同样的用户权限，即为配置的匿名uid对应的权限，这个参数很有用
+    anongid 同anonuid 组id设置
+
+提示
+    在生产环境中，对于共享的nfs目录，一般客户端挂载不会配置到/etc/fstab里，因为，在客户端主机重启时如果由于网络等原因连接不上nfs server 会导致客户端主机无法启动的厄运，一般通过把mount -t nfs ip:dir 命令放到rc.local中来实现开机自动挂载nfs,不过这也会引起另外问题，就是重启客户端后挂载nfs不成功，要注意
+    a. /etc/rc.local  缺点 偶尔开机挂载不上，工作中监控挂载点
+    b. /etc/fstab     缺点 nfs服务端出于不可用状态，那么客户端开机后可能会导致无法启动的风险，
+fstab最后两列，要设置 0 0,也要做挂载点的监控
+
+cat /proc/mounts  查看挂载文件的具体参数
+
+技巧 注意项
+1. 机器名不要设置成localhost
+2. 只读共享ro,不要加sync 只要(ro) 就可以
+3. 规范输入信息
+4. 主要路径，不要出错
+5. 记得开机挂载放到 /etc/rc.local(加注释)，尽量不要放到fstab里，并做挂载点监控
+6. 切换root 使用 sudo su - 这样不用输入root密码，工作中也不会给你root密码
+7. 每步骤都做检查验证
+8. 服务端共享目录时，不能给777权限，修改属主属组为nfsnobody,可读时权限属组都不要动，就默认root就行
+9. 
