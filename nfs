@@ -184,11 +184,12 @@ nfs /etc/exports 参数重点
 
 提示
     在生产环境中，对于共享的nfs目录，一般客户端挂载不会配置到/etc/fstab里，因为，在客户端主机重启时如果由于网络等原因连接不上nfs server 会导致客户端主机无法启动的厄运，一般通过把mount -t nfs ip:dir 命令放到rc.local中来实现开机自动挂载nfs,不过这也会引起另外问题，就是重启客户端后挂载nfs不成功，要注意
-    a. /etc/rc.local  缺点 偶尔开机挂载不上，工作中监控挂载点
+    a. /etc/rc.local  缺点 偶尔开机挂载不上，工作中监控挂载点,建议做法
     b. /etc/fstab     缺点 nfs服务端出于不可用状态，那么客户端开机后可能会导致无法启动的风险，
-fstab最后两列，要设置 0 0,也要做挂载点的监控
+fstab最后两列，要设置 0 0,也要做挂载点的监控,fstab 最后两列如果设置0 0 就可以避免挂载不上启动不了机器的风险，如果不是0 0就有风险
 
-cat /proc/mounts  查看挂载文件的具体参数
+cat /var/lib/nfs/etab 服务端查看挂载参数
+cat /proc/mounts  客户端查看挂载文件的具体参数
 
 技巧 注意项
 1. 机器名不要设置成localhost
@@ -199,4 +200,89 @@ cat /proc/mounts  查看挂载文件的具体参数
 6. 切换root 使用 sudo su - 这样不用输入root密码，工作中也不会给你root密码
 7. 每步骤都做检查验证
 8. 服务端共享目录时，不能给777权限，修改属主属组为nfsnobody,可读时权限属组都不要动，就默认root就行
-9. 
+
+nfs排错思路：
+no route to host 防火墙问题 经验 
+没经验如何检查
+    a.ping ip  确定物理链路是否通，高速公路通不通
+    b.telnet ip 端口(111)  通不通，设没设收费站
+
+nfs开机自动挂载
+1.放在/etc/rc.local 中进行开机自动挂载，建议用
+2.放在/etc/fstab里面
+
+    挂载项、目录            本地的挂载点       文件系统类型  挂载选项      备份 磁盘检查 
+    tmpfs                   /dev/shm                tmpfs   defaults        0 0
+    devpts                  /dev/pts                devpts  gid=5,mode=620  0 0
+    sysfs                   /sys                    sysfs   defaults        0 0
+    proc                    /proc                   proc    defaults        0 0
+    [root@6.4-122-client ~]#
+
+nfs客户端挂载建议
+a. 把nfs rpc服务的挂载命令放入/etc/rc.local,然后在通过监控软件监控开机后的挂载情况
+b.如果决定把挂载命令放入/etc/fatab里，那么关键是第5,6列的数字要为0，即不备份，不做磁盘检查，同时在监控开机后的挂载情况，最重要的一条是如果fstab做网络nfs系统的开机挂载，那么，rpc服务的开机启动就要用chkconfig来设置，否则，就会导致‘乌龙球’了，系统可能启动不起来了，nfs挂载也不正常
+
+/etc/fstab 详解，每个文件系统占一行，一行6列，默认tab键做分割，空格也行
+    第一列 是需要挂载的设备或者远程的文件系统（如nfs）
+        此列的格式
+            普通挂载  /dev/cdrom
+            nfs挂载   <host>:<dir> 如192.168.1.121:/deannfs/dean
+            procfs挂载 proc
+            LABEL或UUID挂载 LABEL=<label> or UUID=<uuid> 如LABEL=/boot 或UUID=3e6bsdas-8129-asdad....
+    第二列 是文件系统在本地的挂载点
+            例如把/dev/sdb 挂载到/opt 下，这些就写 /opt,特别说明，man fstab中提到，如果是swap分区的话其挂载点为none，但centos系统装完系统后，发现swap挂载点分区是swap,arclinux 挂载点为none,注意一下即可
+
+    第三列 是要挂载的文件系统类型
+            man手册中类型有n种，man mount -t vfstype 参数 查看当前系统内核支持的文件系统可以执行cat /proc/filesystem
+    第四列 是文件系统关联的mount选项
+            此列挂载项至少包含一个文件系统类型，可以加上其他的符合文件系统类型的相关选项
+                noauto  不能被mount -a命令挂载，启动时不自动挂载
+                user 允许用户挂载
+                owner 所有的设备属主用户可以挂载
+                pamconsole
+                comment
+         man 8 mount -o 后的参数
+            注意有的参数是在fstab里才有效
+                async（文件系统优化） 所有设置的文件系统I/O的操作都是异步处理，既不会同步写入到磁盘，此参数能提高性能，但会降低数据安全，一般生产环境不建议使用，除非对性能要求高，对数据可靠性不要求的场合，对应sync
+                atime（优化项noatime） 在每一次数据访问时，同步更新每次访问的inode时间，是默认选项，在高并发情况下，建议通过明确加上noatime，来取消这个默认项，以到达提升IO性能，优化IO目的h对应，noatime
+                default  这个缺省值包括rw,suid,dev,exec,auto,nouser,async
+                exec,允许执行二进制文件  对应noexec，使用noexec时,像shell,php这样的程序也是不能执行的,但通过 sh test.sh 这样的方式还是能执行的，/opt/test.sh方式无法执行
+                nodiratime 目录时间戳不更新
+                noauto，对应auto 可以被mount -a 自动挂载
+                noexec
+                suid
+                user nouser 
+                nosuid 禁止一个普通用户挂载该文件系统，默认挂载的默认选项
+                remount  尝试从新挂载一个已经挂载了的文件系统，通常被用于来改变一个文件系统的挂载标志，从而使得一个只读文件系统的可写，这个动作不会改变设备或挂载点，当系统进入故障时，进入single或rsscue模式修复系统时，会发现根文件系统会变成只读文件系统，不允许修改，此时，此命令就有用了，mount -o remount,rw / 将根文件系统重新挂载，修复时这个命令很重要
+                ro 挂载一个只读文件系统
+                rw 读写
+               优化参数 图10 图11   图12
+    第五列 通过设置数字0或者1 来决定文件系统是否需要（检查）dump
+            0表示不需要dump (dump是linux系统的的备份命令)
+    第六列 通过设置数字0或者1 来控制是否在开机进行fsck检查
+            0为不检查，根分区一定设置为1，/boot 一般设置为2,如果设置了1是执fsck -A
+技巧： 对于本地文件系统一般放在fstab里面做挂载，并且结尾的两列不要用1   1，用0  0
+强调：
+开机过程是/ect/fstab 先于/etc/rc.local 加载，所以如果先执行fstab,并设置了1 1，此时rc.local没执行，rpcbind没启动呢，所以会起不来，造成风险，建议放到rc.local或者放到fstab时设置 0 0，并将rpcbind开机启动使用chkconfig方式设置
+
+    遇到这种情况有两类
+        1.提示你输入用户名密码进行维护，此时默认/etc/fstab是只读的，需要mount -o rw,remount /,之后才能编辑/etc/fstab
+        2.无法输入用户名密码等任何信息，此时使用u盘引导修复
+
+nfs及 mount优化
+    a.安全优化挂载参数
+        mount -t nfs -o nosuid,noexec,nodev,rw 192.168.1.121:/deannfs/dean /opt 命令行使用，fstab也能用，也生效，网络文件系统和本地文件系统效果也是一样的
+        (dd 可以模拟建一个磁盘进行挂载测试)
+    b.性能调优参数
+        rsize,wrise(6.4下默认为65536 已经做了优化，cat /proc/mounts 查看，数值较小的话就需要优化) 图13,
+        noatime,nodiratime
+
+企业生产环境nfs性能优化挂载的例子
+mount -t nfs -o nosuid,noexec,nodev,noatime,nodiratime,intr,rsize=65536,wsize=65536 192.168.1.121:/deannfs/dean /mnt
+如果是本地的文件系统
+mount /dev/sdb1 /mnt -o defaults,async,noatime,nodiratime,data=writeback,barrier=0 提示，nodiratime有可能报错       
+
+
+
+
+
