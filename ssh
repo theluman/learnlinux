@@ -1,0 +1,181 @@
+ssh  secure shell protocol
+
+几款优秀的画图工具
+    edraw freemid viso ppt  排版用word
+ssh服务提供两个服务功能
+    1、ssh连接服务
+    2、类似ftp服务，sftp-server
+    ssh客户端还包含一个很有用的scp,远程拷贝命令，也是使用ssh加密协议
+ssh 结构
+    openssh    ssh server 默认使用22端口
+    客户端软件 xshell securecrt 
+ssh有两个不兼容的协议版本  1.x和2.x
+ssh服务端是一个守护进程(demon)，后台运行并监听响应客户端的请求，进程名sshd
+    ssh大致工作机制，客户端先发送一个连接请求到远程ssh服务端，服务端检查连接的客户端发送的数据包和ip地址，确认合法后，就会发送秘钥给ssh客户端，此时，客户端本地再将秘钥发给会服务端，自此建立连接
+
+ssh加密技术：
+公钥与私钥 组合成的秘钥对
+    列如 A-server要给B-client传输数据，首先经过A本地的公钥加密后再发到网上传输，而加密的数据到达B后，在经过B本地的私钥将加密的数据解密出来
+
+生活中锁和钥匙，锁对应公钥，钥匙对应私钥
+ssh2支持rsa和dsa  ssh1仅支持rsa
+ssh1 加密的步骤  图15
+    当ssh服务启动时，就会产生一个768bit的临时公钥（/etc/sshd_config中 ServerKeyBits768），存放在Server中
+    当client客户端联机请求传送过来时，Server就会将这个768-bit的公钥传给client端，此时client会将此公钥与先前存储的公钥进行对比，看是否一直，判断标准是client端连接用户目录下~/.ssh/known_hosts文件的内容，如果先前没有存储，会提示让你敲yes或no,（一般第一次连接时会提示）有的话就不提示，直接下一步
+    client得到server的公钥后，会在本地随机产生一个256-bit的私钥（private key或host key），并且以加密的方式将server key与private key 整合成一个完整的key pair,并且传送给server
+    完成以后，server,client在这次连接中，就以这一对1024bit的kay pair进行数据传递
+也就是说，public是放在server上的，client能接受public key,并利用public key 计算出private key,并把二者组合成独一无二的key pair ，因为client每次的256-bit的host key是随机产生的，所以这次连接和下次连接的host key可能不一样，此外client端的用户默认目录下~/.ssh/know_hosts会记录曾经联机的public key,用以确认每次来自该主机的联机是否正确
+
+ssh2
+在ssh1连接过程中，当server接受client端的key pair后，就不再对该次联机过程中的key pair进行检验，造成安全隐患，如果有人针对该次连接的key pair进行恶意代码插入，造成server接受恶意代码
+    为了改正这个缺点，2版本多加了确认连接key pair正确性的diff-hellman机制，每次server都会对key pair进行检查，2version比较安全
+
+
+ssh认证类型，主要两种
+1、基于口令的安全验证
+    账号 密码方式，只要知道ssh server的账号密码，ip地址，端口，就可以连接
+2、基于秘钥的安全验证
+    需要依靠密钥，必须事先建立在客户端建立一对密钥对（公钥，私钥），然后把公钥public key放在需要访问的目标服务器上，另外把私钥private key 放到ssh的客户端或对应的客户端服务器上
+    此时如果想连接这个带有公钥的ssh服务器，客户端ssh软件或者客户端服务器就会像ssh服务器发出请求，请求用联机的用户密钥进行安全验证 ssh服务器收到请求后，会先在该ssh服务器上连接用户的家目录下寻找事放上去的对应用户的公钥，然后把和它连接的ssh客户端发送过来的公钥进行比较，如果两个公钥一直，ssh服务器就用公钥加密‘质询’（challenge）并把它发送给ssh客户端
+    ssh客户端收到‘质询’之后就可以用自己的私钥解密，再把它发送给ssh服务器，使用这种方式，需要知道联机用户的秘钥文件，不需要在网络上传输账号密码，安全性更高了，但需要很好的保护秘钥文件，特别是私钥文件
+    
+openssl openssh是需要的软件
+
+netstat -lntup |grep sshd  
+ man netstat
+
+题目 两种方法查看 知道端口，不知道对应什么服务
+netstat -lntcp|grep 端口
+lsof -i tcp:端口
+
+/etc/ssh/sshd_config 习惯性的优化
+    Port   修改默认端口
+    PermitRootLogin no      禁止root远程登录
+    UseDNS no      不使用dns
+
+uptime 查看远程服务器的负载，uptime 数据很准确，不是很细
+[dean@deanarch ~]$ ssh root@192.168.1.121 uptime
+root@192.168.1.121's password: 
+开机运行时间                 链接用户数           1分钟负载 5分钟负载 15分钟负载
+ 08:43:46 up 1 day, 11 min,  2 users,  load average: 0.00, 0.00, 0.00
+[dean@deanarch ~]$
+
+分发数据（一把钥匙开多把锁）
+    需求，所有服务器在同一用户sshfenfa系统用户下，实现A机器从本地发送数据B、c机器上，在分发过程中不需要B,c提示密码验证，还可以批量操作查看B,c的cpu load mem等信息（一句话批量操作）
+    A是一把钥匙，B、C是锁，一把钥匙开多把锁
+
+开始前准备,添加系统用户sshfenfa
+注意，很多公司直接用root用户来操作，这样不安全，如果禁止了root用户远程连接，这个方法无效
+    A,B,C服务器上添加好sshfenfa用户并设置密码，通过sshfenfa用户来实现多个服务器间免密登录
+useradd sshfenfa && echo '123456'|passwd --stdin sshfenfa
+
+[root@A-Server ~]#useradd sshfenfa && echo '123456'|passwd --stdin sshfenfa
+Changing password for user sshfenfa.
+passwd: all authentication tokens updated successfully.
+
+开始部署
+    因为A服务器为中心分发服务器，所以在A端建立Public key(锁)与Private key(钥匙)，实际上只需要有一对密钥就可以，在哪个机器上建立都是一样的，而且只需要建立一次即可，‘去超市买锁带钥匙’
+    在A上建立dsakey  生成Public Key和private Key
+        ssh-keygen是生成密钥工具，-t指定密钥类型，有rsa和dsa类型
+            rsa与dsa加密算法区别
+                rsa是加密或者数字签名，dsa仅是数字签名
+[root@A-Server ~]#su - sshfenfa
+[sshfenfa@A-Server ~]$ssh
+ssh          ssh-add      ssh-agent    ssh-copy-id  sshd         ssh-keygen   ssh-keyscan
+[sshfenfa@A-Server ~]$ssh-keygen -t dsa
+Generating public/private dsa key pair.
+Enter file in which to save the key (/home/sshfenfa/.ssh/id_dsa): 
+Created directory '/home/sshfenfa/.ssh'.
+Enter passphrase (empty for no passphrase): 
+Enter same passphrase again: 
+Your identification has been saved in /home/sshfenfa/.ssh/id_dsa.
+Your public key has been saved in /home/sshfenfa/.ssh/id_dsa.pub.
+The key fingerprint is:
+0d:e0:0e:e8:6c:2a:30:b1:22:34:6c:d0:8b:2e:ec:03 sshfenfa@A-Server
+The key's randomart image is:
++--[ DSA 1024]----+
+|..    .          |
+|o .. . .         |
+|.*... . .        |
+|+=o  o   o       |
+|O +   . S .      |
+|E*               |
+|*                |
+|.o               |
+|  .              |
++-----------------+
+[sshfenfa@A-Server ~]$
+
+需要注意 .ssh目录的权限是700 ，私钥private key文件id_dsa权限是600，公钥public key文件id_dsa.pub权限是644，其中私钥id_dsa文件权限必须为600
+
+分发公钥（锁）
+A端执行  scp命令的话还需要改权限，改名字，不使用
+    使用ssh-copy-id 命令分发
+    ssh-copy-id -i 公钥文件 sshfenfa@ip  默认22端口
+    ssh-copy-id -i 公钥文件 ‘sshfenfa@ip 端口’
+
+[sshfenfa@A-Server .ssh]$ssh-copy-id -i id_dsa.pub sshfenfa@192.168.1.122
+The authenticity of host '192.168.1.122 (192.168.1.122)' can't be established.
+RSA key fingerprint is 65:14:35:d2:92:a3:42:c1:57:94:7b:85:38:b0:d6:cb.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '192.168.1.122' (RSA) to the list of known hosts.
+Address 192.168.1.122 maps to localhost, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!
+sshfenfa@192.168.1.122's password: 
+Permission denied, please try again.
+sshfenfa@192.168.1.122's password: 
+Now try logging into the machine, with "ssh 'sshfenfa@192.168.1.122'", and check in:
+
+  .ssh/authorized_keys
+
+to make sure we haven't added extra keys that you weren't expecting.
+
+authorized_keys 权限600，名字设置在配置文件中 /etc/ssh/sshd_config
+    # The default is to check both .ssh/authorized_keys and .ssh/authorized_keys2
+    # but this is overridden so installations will only check .ssh/authorized_keys
+    AuthorizedKeysFile  .ssh/authorized_keys
+
+配置完成，测试一下
+ssh sshfenfa@192.168.1.122 free -m  查看内存
+
+[sshfenfa@A-Server .ssh]$ssh sshfenfa@192.168.1.123 free -m
+Address 192.168.1.123 maps to localhost, but this does not map back to the address - POSSIBLE BREAK-IN ATTEMPT!
+             total       used       free     shared    buffers     cached
+Mem:           742        158        583          0         21         42
+-/+ buffers/cache:         94        647
+Swap:         1503          0       1503
+[sshfenfa@A-Server .ssh]$
+    问题出现 Address 192.168.1.123 maps to localhost, but this does not map back to the address - POSSIBLE BRE    AK-IN ATTEMPT!  在中心分发端即A-server 修改 /etc/ssh/ssh_config 里的GSSAPIAuthentication yes  改成GSSAPIAuthentication no 重启sshd 即可
+
+提示问题
+    免密码验证是单向的，如果需要双向，钥匙锁一人一份，但很危险
+    基于默认用户的，最好不要跨用户
+    ssh连接慢的问题
+    批量分发1000台，初始都需要输入一次密码，并且第一次连接要yes确认
+
+分发数据到所有节点
+A上的数据分发到B,C
+ssh免密码+scp 命令+脚本
+ssh免密码+rsync 命令+脚本
+图16 分发脚本
+
+scp rsync区别
+1、scp 傻瓜式拷贝，rsync除了拷贝，还有增量拷贝
+2、rsync可以做两端机器的完全同步，删除也会同步，有风险
+3、scp仅仅是ssh协议的一个命令应用，rsync除了可以使用ssh通道外，还可以配置守护进程方式进行数据同步，甚至简单执行命令在本机进行数据同步或增量
+
+分发数据免密码登录的几点须知
+    1、免密码登录默认是单向的，只能从A到B,C
+    2、记住锁与钥匙的两端各是谁
+    3、所有秘钥的默认目录~/.ssh目录，其中.ssh目录权限最好是700，以免密钥数据泄漏
+    4、若要建立其它主机如D机，可以被A机免密码登录。只需要从A端执行ssh-copy-id -i id_dsa.pub sshfenfa@ip 即可
+    5、此种方法适用于生产环境分发数据（如host文件）,发布程序代码等生产场景，甚至查看所有机器的内存，cpu,负载，进程等所有需要的服务器信息，应用非常普遍
+    6、对于千台以上的大规模服务器公司，也可能考虑使用cfengine/puppet 等分发工具，来实现功能，但其配置较复杂
+    特别提示：本次免密码登录时基于普通用户sshfenfa的，如果要实现hosts文件等的推送工作，是需要root权限的，该怎么实现？
+        方法大概有三个：
+            法一：把sshfenfa配置成sudo权限用户，然后使用sudo实现功能
+                sudo推送有两个方法
+                    1、执行visudo注释defaults requiretty 参数
+                    2、使用ssh -t hostname sudo <cmd>  建议此方法,此方法需要节点服务器现将sshfenfa用户加入到/etc/sudoers,并设置某命令不需要密码，例如rsync,图17，图18
+            法二：修改客户端的echo cp scp命令，修改为setuid位 不过不推荐。只是发散思维
+            法三：配置root用户的免密码登录，但这又会带来一定的安全问题（虽然ssh可以防火墙封堵ssh端口），而且，我们前面的做的禁止root登录优化需要都打开才行，更不安全
+    无论如何一定要管理好中心分发服务器A,他的权限最大，例如取消外网ip，开启防火墙禁止ssh对外登录，仅给某一后端无外网机器访问，然后这台后端的服务器依然没外网ip,并且仅能通过vpn链接。这样中心分发服务器就相对安全了。

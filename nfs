@@ -282,7 +282,88 @@ mount -t nfs -o nosuid,noexec,nodev,noatime,nodiratime,intr,rsize=65536,wsize=65
 如果是本地的文件系统
 mount /dev/sdb1 /mnt -o defaults,async,noatime,nodiratime,data=writeback,barrier=0 提示，nodiratime有可能报错       
 
+压力测试nfs优化后的性能
+time 命令是计算一个命令运行了多久
+time dd if=/dev/zero of=/opt/testfile bs=9k count=20000     bs是数据块大小 block size  count 是数据块数量文件大小为9k*20000  这是写入单个大文件的时间
+###优化参数加入前，目前客户端参数
+192.168.1.121:/deannfs/dean /opt nfs4 rw,relatime,vers=4,rsize=65536,wsize=65536,namlen=255,hard,proto=tcp,port=0,timeo=600,retrans=2,sec=sys,clientaddr=192.168.1.122,minorversion=0,local_lock=none,addr=192.168.1.121 0 0
+==============================================================================================
+[root@6.4-122 ~]#time dd if=/dev/zero of=/opt/testfile bs=9k count=20000
+20000+0 records in
+20000+0 records out
+184320000 bytes (184 MB) copied, 3.41999 s, 53.9 MB/s
 
+real    0m3.538s
+user    0m0.002s
+sys 0m0.308s
+=====================================================================================
+测试批量写入一定数量小文件的耗时
+time for((i=1;i<20000;i++));do /bin/cp /bin/touch /opt/testfile/touch$i;done 批量copy /bin/touch 这个文件到/opt下   
 
+[root@6.4-122 ~]#time for((i=1;i<20000;i++));do cp /bin/touch /opt/dean/touch$i;done
 
+real    4m20.322s
+user    0m5.864s
+sys 0m46.732s
+[root@6.4-122 ~]#
+========================================================================================
+######加入优化参数后 /bin/mount -t nfs -o nosuid,noexec,nodev,noatime,nodiratime,intr 192.168.1.121:/deannfs/dean /opt
 
+192.168.1.121:/deannfs/dean /opt nfs4 rw,nosuid,nodev,noexec,noatime,nodiratime,vers=4,rsize=65536,wsize=65536,namlen=255,hard,proto=tcp,port=0,timeo=600,retrans=2,sec=sys,clientaddr=192.168.1.122,minorversion=0,local_lock=none,addr=192.168.1.121 0 0
+==============================================================================================
+[root@6.4-122 ~]#!156
+time dd if=/dev/zero of=/opt/testfile bs=9k count=20000
+20000+0 records in
+20000+0 records out
+184320000 bytes (184 MB) copied, 2.76983 s, 66.5 MB/s
+
+real    0m2.794s
+user    0m0.002s
+sys 0m0.224s
+[root@6.4-122 ~]#
+=============================================================================================
+[root@6.4-122 ~]#!164
+time for((i=1;i<20000;i++));do cp /bin/touch /opt/dean/touch$i;done
+
+real    4m5.482s
+user    0m5.974s
+sys 0m46.066s
+=============================================================================================
+学习测试方法 time dd for,真实服务器测试数据为准，还要规避缓存的影响
+
+利用autofs 实现nfs客户端自动挂载，不是很重要，生产存储业务autofs没有任何意义
+    autofs可以实现有用户访问自动挂载，无访问，自动卸载，效率不加，高并发不用，相当于你等菜的应用，用到了再去看视频
+
+showmount -e server-ip
+exportfs 可以直接共享目录
+rpcinfo -p [host] 
+
+nfs防火墙设置说明
+真正生产环境中的存储服务器都属于内网服务器，都无需防火墙，因此可不配置防火墙，需要配置的话就两种
+1、仅允许ip段访问
+iptables -A INPUT -s 10.0.0.0/24 -j ACCEPT
+2、允许ip段端口访问
+iptables -A INPUT -i eth1 -p tcp -s 10.0.0.0/24 --dport 111 -j ACCEPT
+iptables -A INPUT -i eth1 -p udp -s 10.0.0.0/24 --dport 111 -j ACCEPT
+iptables -A INPUT -i eth1 -p udp -s 10.0.0.0/24 --dport 2049 -j ACCEPT
+iptables -A INPUT -i eth1 -p udp -s 10.0.0.0/24 --dport -j ACCEPT
+
+nfs服务生产场景说明 关键
+作用
+    nfs可以让不同的客户端挂载使用同一个目录，作为共享存储使用，这样可以保证不同节点的客户端一致性，在集群环境中经常会用到
+优点
+    简单--->  简单上手
+    方便--->  部署快速，维护简单
+    可靠--->  从软件层面上看，数据可靠性高，经久耐用
+局限性
+    1、存在单点故障，如果nfs server宕机了，所有客户端都不能访问目录，这个后期需要通过负载均衡及高可用方案弥补
+    2、在高并发的场合，nfs效率有限（一般几千万一下pv的网站不是瓶颈，除非架构太差）
+        好的架构 图14
+    3、客户端认证时基于ip和主机名的，安全性一般（用于内网问题不大）
+    4、nfs数据是明文的，对数据完整性不作验证
+    5、多台机器挂载nfs服务时，连接管理维护麻烦，尤其是nfs服务端出问题后，所有客户端都挂掉状态（测试环境可使用autofs自动挂载解决）
+生产应用场景
+   中小型网站（2000万pv以下）线上应用，都用有用武之地，门户站也会有其他方面的应用，当然未必是线上存储使用
+
+出现卸载忙的解决
+umount -lf
