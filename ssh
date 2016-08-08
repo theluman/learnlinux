@@ -175,7 +175,86 @@ scp rsync区别
             法一：把sshfenfa配置成sudo权限用户，然后使用sudo实现功能
                 sudo推送有两个方法
                     1、执行visudo注释defaults requiretty 参数
-                    2、使用ssh -t hostname sudo <cmd>  建议此方法,此方法需要节点服务器现将sshfenfa用户加入到/etc/sudoers,并设置某命令不需要密码，例如rsync,图17，图18
+                    2、使用ssh -t hostname sudo <cmd>  建议此方法,此方法需要节点服务器现将sshfenfa用户加入到/etc/sudoers,并设置某命令不需要密码，流程是，先将文件从中心分发服务器A推送到B,C的sshfenfa用户家目录下，在进行同步到各个文件夹下。例如rsync,图17，图18
             法二：修改客户端的echo cp scp命令，修改为setuid位 不过不推荐。只是发散思维
-            法三：配置root用户的免密码登录，但这又会带来一定的安全问题（虽然ssh可以防火墙封堵ssh端口），而且，我们前面的做的禁止root登录优化需要都打开才行，更不安全
-    无论如何一定要管理好中心分发服务器A,他的权限最大，例如取消外网ip，开启防火墙禁止ssh对外登录，仅给某一后端无外网机器访问，然后这台后端的服务器依然没外网ip,并且仅能通过vpn链接。这样中心分发服务器就相对安全了。
+                scp命令 远程安全的copy
+                -大P 端口
+                -p 保持属性
+                -r  拷贝目录
+            法三：配置root用户的免密码登录，很方便，但这又会带来一定的安全问题（虽然ssh可以防火墙封堵ssh端口），而且，我们前面的做的禁止root登录优化需要都打开才行，更不安全
+    无论如何一定要管理好中心分发服务器A,他的权限最大，需要优化，例如
+        1、取消外网ip
+        2、开启防火墙禁止ssh对外用户登录，仅给某一后端无外网机器访问，然后这台后端的服务器依然没外网ip,并且仅能通过vpn链接。这样中心分发服务器就相对安全了。图19
+    
+sftp 用的比较少  ssh自带的ftp工具
+
+备份数据（多把钥匙开一把锁）
+    特别说明 备份数据在生产环境中，一般我们习惯用rsync的服务模式，而不是本文的ssh免key认证的模式，开拓思路用，要真使用也没啥问题，图20，就相反的设置锁和钥匙，效率也不高，把鸡蛋都放在一个篮子里，不好，不详细总结了
+    
+那么如何备份数据呢？
+    方法一：生产环境常用的，使用rsync服务，在备份服务器部署rsync守护进程，把所有备份节点作为rsync的客户端，此方案是常用，推荐的，对于特别碎的文件要打包传输
+    方法二：ftp的方式，在备份服务器部署ftp守护进程，把所有备份节点作为ftp客户端，在本地备份完毕，把数据通过ftp的方式推送到备份服务器上，此法是多年以前的备份方法
+    方法三：nfs方式，在备份服务器部署nfs服务，把所有备份节点做为nfs客户端，在本地备份完毕（甚至可以直接备份到服务端的nfs server上），把数据通过挂载的方式推送到nfs备份服务器上，此方法是个个案，机器较少，10台以内可以采用，没特殊情况，最好不要用
+    方法四:scp 加ssh key或expect 交互式的方法备份，作为一个备份思路，不推荐使用
+强调：无论哪种备份方案，都不能完全保证数据备份正常，在工作中还要对备份服务器上的数据通过脚本程序做检查，定时邮件发送，甚至做定期的人工或自动化的还原数据测试操作(如，每周一次把数据自动还原到测试机的web server,db server等)。然后备份及还原结果定时（一般每日）安排人工或自动的发送到邮箱，确保数据真正有效
+
+没有ssh-copy-id命令时的传统ssh分发方法
+准备工作：先ssh-keygen  创建公钥私钥,注意文件目录 ~/.ssh/
+第一步：把公钥id_dsa.pub 改名为authorized_keys,将默认权限644改为600
+    cp -p id_dsa.pub authorized_keys
+    chmod 600 authorized_keys
+第二步：把authorized_keys连同上级目录.ssh打包
+    cd ../
+    chmod 700 .ssh 如果.ssh已经为700，不用执行
+    tar zcvfp ssh-key-$(uname -n)_authorized_keys.tar.gz.ssh --exclude=.ssh/known_hosts --exclude=.ssh/id_dsa     --exclude 不打包某个文件，p参数保持文件及目录属性
+第三步：把authorized_keys 连同上级目录.ssh打包好的文件分发的个节点
+    scp
+    scp
+    scp ...
+
+批量分发文件及批量管理、部署10种解决方案
+1、secboy 老男孩的软件，没写完
+2、secureCRT,xshell 批量命令，50,100台服务器可用
+    备份 /etc/hosts
+    cat > /etc/hosts<<EOF
+        内容。。。。。
+        内容。。。。。
+    EOF
+3、ssh免密码的方案,在配合rsync
+    三种方式
+        root 不推荐
+        sudo 推荐
+        setuiad 不推荐
+4、expect
+    expect 可以直接用于批量分发管理，省了秘钥认证。交互式命令（结合rsync+scp+sudo)，实现普通用户，root用户之间的文件分发，批量部署及配置，查看信息
+   优点：简单强大。缺点：难度略大，相对复杂，也涉及权限问题，要写开发脚本，服务器数量较少时，性价比不高 
+5、puppet
+    分发工具。分发和抓取
+    缺点：复杂，特别在控制，批量部署方面实现复杂，大部分人仅实现了数据分发
+    实力不够，不要用
+6、cfenqine
+    分发工具，分发和抓取
+    缺点 同puppet
+    实力不够，不要用
+7、rsync
+    分发服务器上部署rsync daemon,然后客户机上通过定时任务抓取的方式实现文件分发
+8、lsyncd(sersync) inotify
+    触发式，实时的推送拉取
+9、http-ftp
+    http server+客户机cron,实现文件分发
+10、nfs网络文件系统
+    把要分发的文件放在nfs上，然后客户端通过定时任务，复制到需要的目录
+
+ssh登录服务器慢的问题
+    1、服务器上的/etc/resolv.conf中有错误的dns地址，或为内网地址或为不可用的dns地址
+    2、sshd_config配置文件中使用了UserDNS yes（若是注释，默认也是启用的），使用UserDNS no
+    3、sshd_config 配置文件中使用了GSSAPIAuthentication yes 默认也是这样，改为GSSAPIAuthentication no
+
+ssh慢的常见问题
+    执行ssh root@192.168.0.8 反应非常的慢，等很久的时间才链接进去
+        故障分析
+            一般是hosts文件的127.0.0.1和主机名不对应导致的
+            sshd.conf 配置文件的验证没有取消掉
+        解决以上即可
+
+

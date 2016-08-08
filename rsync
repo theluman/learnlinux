@@ -1,0 +1,89 @@
+rsync 数据同步服务
+    rsync是开源的，快速的，多功能的、可实现全量及增量的本地或远程数据镜像同步备份的优秀工具，rsync适用于unix linux windows 等多种平台
+
+    rsync具有可使本地和远程两台主机之间的数据快速复制同步镜像，远程备份等功能，这个功能类似scp，但由于scp的功能，当然，rsync还可以在本地主机的不同分区或目录之间全量及增量的复制数据，这类似cp命令，同样也优于cp命令
+    rsync还可以实现类似rm的删除功能
+关键字 全量，增量，本地，远程 同步备份工具
+
+在同步备份默认下，rsync通过其独特的‘quick check’ 算法，仅同步大小或者最后修改时间发生变化的文件或目录。
+    通过参数设置可以实现其他标准的同步，权限变化，某一文件的内容变化同步
+
+rsync的特性：
+    支持拷贝特殊文件，如链接，设备等
+    可以有排除指定文件或目录的同步的功能，相当于打包命令的排除功能
+    可以做到保持原来文件或目录的权限、时间、软硬链接,属主，组等所有属性均不改变
+    可实现增量同步，即只同步发生数据变化的数据，因此数据传输效率很高
+    rsync本身传输是不加密的，可以使用rcp,rsh,ssh,等方式配合传输文件，
+    可以直接通过socket（进程方式）传输
+    支持匿名的或认证（无需系统用户）的进程传输模式，可实现方便安全的进行数据备份及镜像
+
+rsync的工作方式
+    大致三种
+    1、主机本地之间的数据传输（此时类似于cp）
+    2、借助rcp,ssh等通道来进行数据传输（此时类似scp）
+    3、以守护进程的方式传输数据（这个是rsync的重要功能）
+使用
+1、本地传输模式
+    rsync [option] SRC... [DEST]
+    语法说明
+        1.rsync为同步命令
+        2.[option] 为同步时的参数选项
+        3.SRC为源，及等待拷贝的分区，文件，或目录等
+        4.[DEST]为目标分区，文件或目录等
+
+2、通过远程shell 进行数据传输
+    拉取pull   rsync [opition] [USER@]HOST:SRC... [DEST]
+    推送push   rsync [option] SRC... [USER@]HOST:DEST
+        拉取语法实例
+            rsync -vzrtopgP -e 'ssh -p 22' sshfenfa@192.168.1.121:/opt /tmp
+        推送语法实例
+            rsync -vzrtopP -e 'ssh -p 22' /etc sshfenf@192.168.1.122:/tmp
+                -vzrtopg 相当于-avz 表示同步时文件和目录属性不变
+                --progress 显示同步的过程，可以用-P替换
+                -e 'ssh -p 22' 表示通过ssh的通道传输数据 -p 22可以省略
+            -avz是常用的参数
+3、使用守护进程的方式数据传输
+    通过守护进程方式传输同样分为两种情况，每种情况又有两种语法写法
+        拉取：
+            1.rsync [option] [USER@]HOST::SRC... [DEST]
+            2.rsync [option] rsync://[USER@]HOST[:PORT]/SRC... [DEST]
+        推送：
+            1.rsync [option] SRC... [USER@]HOST::DEST
+            2.rsync [option] SRC... rsync://[USER@]HOST[:PORT]/DEST
+    注意，与远程shell方式命令不同的是，第一种语法，均为双冒号链接SRC与DEST,另外，这个SRC或DEST不再是路径了，而是守护进程中配置的模块名称
+
+rsync命令参数选项
+    -v，--verbose 详细模式输出，传输时的进度等信息
+    -z,--compress 传输时进行压缩以提高传输效率 --compress-level=NUM 可按级别压缩
+    -r,--recursive 对子目录以递归模式，即目录下所有文巨都同样传输
+    -t,--times保持文件时间信息
+    -a,--archive 归档模式，以递归的模式传输，并保持所有文件属性，相当于-rlptgoD
+    -P,--progress，显示同步过程，相似与-v
+    -e,加通道的
+    --exclude=PATTERN 指定排除的信息
+
+关键点
+注意命令差别
+    1. rsync -avz /opt/ /tmp
+        /opt/意思是仅把/opt/目录里面的内容同步过来，opt目录本身并不同步；而/opt表示把opt本身及其内容全部同步，要注意区别
+
+rsync 最重要的应用
+以守护进程（socket）的方式传输数据
+
+机器准备 A-server rsync服务端  B-server  rsync节点  C-server rsync节点
+
+具体需求
+    要求在A-server上以rsync守护进程的方式部署rsync服务，使得所有客户端主机，可以把本地数据通过rsync的方式到数据备份服务器A-server上，客户端服务器以B,C为例 图21
+
+开始部署rsync服务-rsync服务端操作
+1.配置rsyncd.conf
+    确认rsync软件是否安装
+[root@6.4-121 ~]#rpm -qa rsync
+rsync-3.0.6-12.el6.x86_64
+[root@6.4-121 ~]#
+    编辑配置文件，rsync默认没有配置文件，需要新建/etc/rsyncd.conf  注意rsyncd
+    
+
+
+    2. rsync -avz /opt /tmp/
+
