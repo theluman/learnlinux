@@ -81,9 +81,84 @@ rsync 最重要的应用
 [root@6.4-121 ~]#rpm -qa rsync
 rsync-3.0.6-12.el6.x86_64
 [root@6.4-121 ~]#
-    编辑配置文件，rsync默认没有配置文件，需要新建/etc/rsyncd.conf  注意rsyncd
-    
+    编辑配置文件，rsync默认没有配置文件，需要新建/etc/rsyncd.conf  注意rsyncd不要丢了d
+        #rsync_config_________________________start
+        #created by dean 9:25 2016-8-9
+        #QQ email
+        ##rsyncd.conf start##
+        uid = rsync
+        gid = rsync
+        use chroot = no
+        max connections = 200
+        timeout = 300
+        pid file = /var/run/rsyncd.pid
+        lock file = /var/run/rsync.lock
+        log file = /var/log/rsyncd.log
+        [oldboy]
+        path = /dean/
+        ignore errors
+        read only = false
+        list = false
+        hosts allow = 192.168.1.1/24
+        hosts deny = 0.0.0.0/32
+        auth users = rsync_backup
+        secrets file = /etc/rsync.password
+        #rsync_config__________________________end
+2. 处理添加路径 /dean, 用户添加useradd rsync -s /sbin/nologin -M,目录授权，chown -R rsync.rsync /dean
+3.配置用于rsync同步的账号，密码及账号文件权限
+    echo "rsync_backup:123456" > /etc/rsync.password
+        其中rsync_backup:123456中的rsync_backup为同步传输用到的虚拟账号，这个账号仅为rsync的账号，不需要是系统账号，后面的123456为密码，不超过8位，中心用：号分割
+    chmod 600 /etc/rsync.password 必须为600权限，因为密码是明文的，所以设置600安全，进root能修改查看
+    cat /etc/rsync.password
+    ll /etc/rsync.password
+4.启动rsync服务
+    以守护进程方式来启动rsync服务
+        rsync --daemon      --daemon表示以守护进程方式启动
+        拓展rsync的参数选项
+            --daemon
+            --address  绑定ip地址提供服务
+            --config=file 更改配置文件路径，而不是默认的/etc/rsyncd.conf
+            --port=prot  更改其它端口提供服务，而不是缺省的873端口
+            提示，以上几个选项仅为了解，生产场景使用不多
+5.添加至开机启动
+    echo "/usr/bin/rsync --daemon" >> /etc/rc.local
+        注意：当然还可以使用chkconfig rsync on 命令，但是必须要编写适合chkconfig操作的脚本才行
+    重启rsync的组合命令
+    pkill rsync   关闭rsync服务
+    rsync --daemon 启动rsync服务
+    检查启动进程
+    ps -ef|grep rsync  检查rsync服务
+    启动服务扩展，写一个简单脚本
+        
+配置客户端
+1. 配置rsync账号及账号文件权限
+    请注意与服务端的配置的区别
+    client端 [192.168.1.122] [192.168.1.123]分别做如下操作
+        echo "123456" > /etc/rsync.password  这里进配置密码，密码是服务端设置的rsync_backup的密码,不需要账号，与服务端的区别，rsync。password不一定需要与服务端一至
+        chmod 600 /etc/rsync.password   必须600，明文存储的密码
+        cat /etc/rsync.password
+        ll /etc/rsync.password
+    配置完成       
+
+客户端操作
+推送（从客户端同步文件或目录到服务端）
+    从客户端推送/etc 目录到服务端rsync指定的目录  /dean 下
+        命令模式一：
+        rsync -avzp etc_2016-08-09.tar.gz rsync_backup@192.168.1.121::oldboy  需要密码
+        rsync -avzp etc_2016-08-09.tar.gz rsync_backup@192.168.1.121::oldboy --password-file=/etc/rsync.password
+        命令模式二：
+        rsync -avzp etc_2016-08-09.tar.gz rsync://rsync_backup@192.168.1.121/oldboy --password-file=/etc/rsync.password 
+    其中的oldboy 是指的服务端配置文件中模块名字
+
+du -sh 查看目录大小 du -sh /*
+
+问题排错
+    1.No route to host问题
+        防火墙阻挡，解决：先telnet ip 873,如果出现connection refuse字样，说明防火墙阻挡，或者服务没开启
+    2.auth failed on module oldboy
+        配置文件没搞对
+备份题：备份全网服务数据
+图23
 
 
-    2. rsync -avz /opt /tmp/
-
+推送用于备份，拉取
