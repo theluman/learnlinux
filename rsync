@@ -161,4 +161,25 @@ du -sh 查看目录大小 du -sh /*
 图23
 
 
-推送用于备份，拉取
+拉取除了用于下载
+也可以用于分发
+
+排除打包的参数
+tar --exclude=FILE -zcvf a.tar.gz ./
+tar -ztvf a.tar.gz  不解压情况下 查看压缩包里的文件
+
+rsync的排除命令
+    --exclude=PATTERN      exclude file matching PATTERN
+    --exclude-from=FILE    read exclude patterns from FILE
+
+exclude=file 还可以写入服务端的/etc/rsyncd.conf
+    提示 服务端的排除参数用于客户端拉取时排除，客户端推送时排除在命令行加入--exclude=file
+
+超级重要参数 --delete  删除参数
+    本地文件删除
+    mkdir null
+    rsync -avz --delete null/ /tmp/
+        解释：rsync --delete /tmp/ /mnt/  这命令是copy /tmp下的东西到/mnt下，如果/tmp下没有的东西，/mnt下即使有也会删除，所以可以利用建立空目录，rsync -avz --delete null/ 192.1681.1.122/  来删除192.168.1.122里的内容，可以删除大文件
+    
+    两边无差异同步,内容完全一致
+    rsync -avz --delete null/ rsync_backup@192.168.1.121::oldboy/ --password-file=/etc/rsync.password
