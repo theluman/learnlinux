@@ -86,23 +86,23 @@ rsync-3.0.6-12.el6.x86_64
         #created by dean 9:25 2016-8-9
         #QQ email
         ##rsyncd.conf start##
-        uid = rsync
-        gid = rsync
-        use chroot = no
-        max connections = 200
-        timeout = 300
-        pid file = /var/run/rsyncd.pid
-        lock file = /var/run/rsync.lock
-        log file = /var/log/rsyncd.log
-        [oldboy]
-        path = /dean/
-        ignore errors
-        read only = false
-        list = false
-        hosts allow = 192.168.1.1/24
-        hosts deny = 0.0.0.0/32
-        auth users = rsync_backup
-        secrets file = /etc/rsync.password
+        uid = rsync               rsync使用的用户，缺省值为-2，通常为nobody
+        gid = rsync             组，通用户
+        use chroot = no       如果为true,daemon会在给客户端传输文件前“chroot to the path” 这是一个rsync的安全配置，内网使用不配也可以
+        max connections = 200     最大连接数
+        timeout = 300         超时时间    默认是0意思是no time，单位秒，建议300-600
+        pid file = /var/run/rsyncd.pid     rsync启动后将进程写入这个文件，如果文件已经存在，rsync不会启动，会终止，此时需要删掉文件重新启动
+        lock file = /var/run/rsync.lock 指定lock文件用来支持 max connections 参数，使得总连接数不会超过限制
+        log file = /var/log/rsyncd.log  日志文件，不设置或者错误设置，rsync会使用syslog输出日志信息
+        [oldboy]  模块名
+        path = /dean/ 服务端物理路径
+        ignore errors  忽略I/O错误
+        read only = false   true的话是只读，false是可写，默认是true,只有false情况下，客户端才能上传文件
+        list = false   是否允许客户端查看可用模块列表，默认是可以
+        hosts allow = 192.168.1.1/24 指定可以链接的客户端主机名和ip 或地址段 ip段
+        hosts deny = 0.0.0.0/32 指定不可以链接的客户端主机名和ip 或地址段 ip段，默认没有此参数，及都可以链接
+        auth users = rsync_backup  指定空格或逗号分隔的用户可以使用哪些模块，用户不需要在本地系统中存在，默认所有用户无密码访问（anonymous rsync）
+        secrets file = /etc/rsync.password 指定用户名密码存放文件格式  用户名:密码
         #rsync_config__________________________end
 2. 处理添加路径 /dean, 用户添加useradd rsync -s /sbin/nologin -M,目录授权，chown -R rsync.rsync /dean
 3.配置用于rsync同步的账号，密码及账号文件权限
@@ -182,4 +182,83 @@ exclude=file 还可以写入服务端的/etc/rsyncd.conf
         解释：rsync --delete /tmp/ /mnt/  这命令是copy /tmp下的东西到/mnt下，如果/tmp下没有的东西，/mnt下即使有也会删除，所以可以利用建立空目录，rsync -avz --delete null/ 192.1681.1.122/  来删除192.168.1.122里的内容，可以删除大文件
     
     两边无差异同步,内容完全一致
-    rsync -avz --delete null/ rsync_backup@192.168.1.121::oldboy/ --password-file=/etc/rsync.password
+    rsync -avz --delete null/ rsync_backup@192.168.1.121::oldboy/ --password-file=/etc/rsync.password  推送使用要特别小心，容易把目录干掉
+    拉取更要注意，别把根目录干掉
+    小结论：
+        执行--delete 参数从rsync服务端往rsync客户端拉取数据时，一定要小心，最好不要用。它比从rsync客户端带--delete参数往rsync服务端推送危险的多，客户端带--delete参数往服务端推送仅删除服务端模块下的数据，而前者有能力删除rsync客户端本地的所有数据包括根目录下的
+
+rsync无差异同步生产场景的应用：
+    一般是有需要两台服务器之间，必须要求数据一致，且实时性又不是很高的情况，如：两台负载均衡下面web服务器之间的同步，或者高可用双机配置之间的同步等，rsync无差异同步非常的危险，而且，有很多替代方案，因此，生产场景没有特殊需求，应避免使用
+
+多模块 多用户
+分模块配置差别项，通用的项放到模块外
+
+服务端部署流程回顾
+    1、配置rsync的配置文件，默认没有，需要创建 /etc/rsyncd.conf
+    2、创建rsync用户和同步的本地目录/oldboy 并根据需要授权目录属主属组为rsync
+        目录和/etc/rsync.password为配置文件中path = /oldboy/参数的配置，密码文件权限600
+    3、账号及密码文件配置
+        echo "rsync_backup:oldboy123" > /etc/rsync.password
+        chmod 600 /etc/rsync.pasword
+    提示：
+        a、/etc/rsync.password 为配置文件中secrets file = /etc/rsync.password 参数的配置
+        b、账号rsync_backup 为 /etc/rsync.password 为配置文件中auth users = rsync_backup 参数的配置
+    4、启动rsync服务
+       rsync --daemon
+        echo "/usr/bin/rsync --daemon" >> /etc/rc.local
+        cat /etc/rc.loacl|grep daemon 
+        ps -ef|grep rsync
+    5、重起
+        pkill rsync
+        rsync --daemon
+        ps -ef|grep rsync
+客户端配置流程
+        echo "服务端设置的密码" > /etc/rsync.password
+        chmod 600 /etc/rsync.password
+            提示客户端的密码文件路径名字和服务端不要求一致，密码一致即可
+客户端操作细节
+    推送，抓取
+    推送
+    rsync -avz /tmp/ rsync_backup@ip::/oldboy/ --password-file=/etc/rsync.password
+        #rsync -vzrtopgP 。。。。。。。......
+    rsync -avz --delete /tmp/ rsync_backup@ip::/oldboy/ --password-file=/etc/rsync.password
+    抓取
+    路径反向操作，注意--delete慎重使用
+
+rsync服务端排错思路
+    
+1、查看rsync服务配置文件路径是否正确，正确默认路径为：/etc/rsyncd.conf
+2、查看配置文件里host allow,host deny,允许ip网段是否允许客户端访问ip网段
+3、查看配置文件中path参数里的路径是否存在，权限是否正确（正常应为配置文件中的UID参数对应的属主和属组）
+4、查看rsync服务是否启动。查看命令为ps -ef|grep rsync,端口是否存在 netstat -lntup|grep 873
+5、查看iptables防火墙和selinux是否开启允许rsync服务通过，也可以考虑关闭
+6、查看服务端rsync配置的密码文件是否权限为600，密码文件格式是否正确,正确格式 用户名:密码，文件配置路径在 secrect files参数对应
+7、如果是推送数据，要查看下，配置rsyncd.conf文件中用户是否对模块下目录有可读写的权限
+
+rsync客户端排错思路
+1、查看客户端rsync配置的密码文件是否为600的权限，密码文件格式是否正确，注意仅需要密码，并且和服务端密码一致
+2、用telnet链接rsync服务器ip地址873端口，查看服务是否启动（可测试服务端防火墙是否阻挡） telnet 192.168.1.121 873
+3、客户端执行命令时，rsync -avz rsync_backup@192.168.1.121::oldboy/test/ /test/ --password-file=/etc/rsync.password
+    此命令的细节要记清楚，尤其是192.168.1.121::/oldboy/test/处的双冒号及其随后的oldbiy的斜线多一个少一个 细节
+
+自我模拟排错
+
+sersync
+    主要是由rsync+inotify的组合使用，包含一些过滤项
+rsync+inotify
+    inotify 是一种强大的、细粒度的、异步的文件系统事件监控机制，linux内核从2.6.13起，加入了inotify支持，通过inotify可以监控文件系统中添加、删除、修改、移动等各种事件，利用这个内核接口，第三方软件就可以监控文件系统下文件的各种变化情况，而inotify-tools正是实施这个监控的软件
+
+配置
+1、rsync客户端先要实现能向rsync服务端推送文件，这是基础
+开始安装：
+rsync客户端：（inotify的服务端）
+    下载inotify-tools, wget https://github.com/rvoicilas/inotify-tools/archive/master.zip，去git上下载
+    查看文件系统是否支持inotify ,如果存在以下这三个文件，及表示支持
+        [root@6.4-122 tools]#ll /proc/sys/fs/inotify
+        total 0
+        -rw-r--r-- 1 root root 0 Aug 12 15:56 max_queued_events
+        -rw-r--r-- 1 root root 0 Aug 12 15:56 max_user_instances
+        -rw-r--r-- 1 root root 0 Aug 12 15:56 max_user_watches
+        [root@6.4-122 tools]#
+
+
