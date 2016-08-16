@@ -252,7 +252,7 @@ rsync+inotify
 1、rsync客户端先要实现能向rsync服务端推送文件，这是基础
 开始安装：
 rsync客户端：（inotify的服务端）
-    下载inotify-tools, wget https://github.com/rvoicilas/inotify-tools/archive/master.zip，去git上下载
+    1、下载inotify-tools, wget https://github.com/rvoicilas/inotify-tools/archive/master.zip，去git上下载
     查看文件系统是否支持inotify ,如果存在以下这三个文件，及表示支持
         [root@6.4-122 tools]#ll /proc/sys/fs/inotify
         total 0
@@ -261,4 +261,52 @@ rsync客户端：（inotify的服务端）
         -rw-r--r-- 1 root root 0 Aug 12 15:56 max_user_watches
         [root@6.4-122 tools]#
 
+    2、解压，编译安装
+        [root@6.4-122 inotify-tools-3.14]#./configure --prefix=/usr/local/inotify-tools-3.14
+        [root@6.4-122 inotify-tools-3.14]#make && make install
+        [root@6.4-122 inotify-tools-3.14]#ln -s /usr/local/inotify-tools-3.14 /usr/local/inotify
+            安装完 /usr/local/inoty/bin 下面有两个脚本  监控一些事件
+    3、编写监控脚本
+                
+            #!/bin/bash
+            #some nessary information
+            host01=192.168.1.121
+            src=/dean/
+            dst=oldboy
+            user=rsync_backup
+            rsync_passfile=/etc/rsync.password
+            inotify_home=/usr/local/inotify
+            
+            #check dictory and file
+            if [ ! -e "$src" ] || [ ! -e "$rsync_passfile" ] || [ ! -e "$inotify_home" ]
+            then
+             echo 'Check File and Folder'
+             exit 1
+            fi
+            
+            #jian kong he tong bu
+            ${inotify_home}/bin/inotifywait -mrq --timefmt '%d/%m/%y %H:%M' --format '%T %w%f' -e close_write,delete,create,attrib $src | while read file
+            do
+             rsync -azru --delete $src $user@$host01::${dst}/ --password-file=$rsync_passfile > /dev/null 2>&1
+            done
+            exit 0
+ 
+
+    4、设置脚本后台启动
+        chmod u+x inotify_rsync.sh
+        nohup /scripts/inotify_rsync.sh &
+        ps -ef|grep rsync
+
+效率不是很高，每秒钟几百个小文件同步可以使用此方法
+
+sersync
+    sersync项目是inotify与rsync技术实现对服务器数据实时同步的解决方案
+    目前使用较多的同步程序是sersync(依赖inotify-tools和rsync)，和google开源的openduckbill(同样依赖于inotify-tools)
+相比以上两个项目，sersync优点：
+1、使用c++ 编写，对linux系统文件产生的临时文件和重复的文件操作会过滤，在结合rsync同步的时候，会减少运行时消耗本地及网络资源，因此速度更快
+2、相比较上面两个项目，sersync配置起来很简单，下载源码，其中bin目录下是已经编译好的二进制文件，配置bin目录下的xml文件直接使用即可
+3、使用多线程进行同步（即可以并发同步多个不同文件），尤其在同步较大文件时，能够保证多个服务器实时保持同步状态
+4、sersync自带出错处理机制，通过失败队列对出错文件重新同步，如果仍然失败，则每10个小时对同步失败的文件在重新同步
+5、sersync自带crontab功能，只需在xml配置文件中开启，即可按预设的配置，隔一段时间整体同步一次
+6、sersync自带socket与http协议扩展，可以满足有特殊需求的公司二次开发
 
