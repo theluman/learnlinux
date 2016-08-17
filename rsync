@@ -310,3 +310,107 @@ sersync
 5、sersync自带crontab功能，只需在xml配置文件中开启，即可按预设的配置，隔一段时间整体同步一次
 6、sersync自带socket与http协议扩展，可以满足有特殊需求的公司二次开发
 
+sersync设计分析
+图24,25,26
+
+sersync安装配置
+三台服务器Master-sersync,slave1-rsync,slave2-rsync
+    Master为同步主服务器，需开启sersync,sersync负责监控监控目录中的事件变化，然后调用rsync命令把更新的文件同步到目标服务器slave，因此需要在主服务器master上设置sersync，在同步目标服务器配置rsync-server(注意是rsync服务),Master上有rsync命令即可，slave上需要配置rsync服务，开启rsync守护进程
+    此方法也可以实现批量数据分发
+    特别提示
+        如果有多台目标服务器，每台都需要配置rsync的配置文件，启动rsync --daemon
+
+1、首先配置目标服务器的rsync,其实就是给目标服务器配置一个rsync服务端
+2、Master上配置rsync密码文件，echo '密码' > /etc/rsync.password,权限600
+3、手工从Master端同步文件到s1,s2,来测试rsync同步是否成功
+4、Master端安装sersync
+    wget https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/sersync/sersync2.5.4_64bit_binary_stable_final.tar.gz
+    解压
+        [root@6.8-123 tools]#tar xvf sersync2.5.4_64bit_binary_stable_final.tar.gz -C /usr/local/
+        GNU-Linux-x86/
+        GNU-Linux-x86/sersync2
+        GNU-Linux-x86/confxml.xml
+    安装    
+        cd /usr/local
+        mv GUN-Linux-x86 sersync
+        [root@6.8-123 sersync]#tree
+        .
+        ├── confxml.xml
+        └── sersync2
+
+        0 directories, 2 files
+        [root@6.8-123 sersync]#
+    规范一下文件目录
+        cd sersync
+        mkdir conf bin logs
+        mv confxml.xml conf/
+        mv sersync2 bin/sersync
+        [root@6.8-123 sersync]#tree
+        .
+        ├── bin
+        │   └── sersync
+        ├── conf
+        │   └── confxml.xml
+        └── logs
+        
+        3 directories, 2 files
+        [root@6.8-123 sersync]#
+
+配置sersync
+    先备份配置文件
+    cp confxml.xml confxml.xml.backup.2016-08-17
+    修改优化confxml.xml
+    24-28行 目录部分
+         24         <localpath watch="/dean">  本地的监控目录
+         25             <remote ip="192.168.1.121" name="oldboy"/> 远程机器的ip 模块名
+         26             <remote ip="192.168.8.122" name="oldboy"/> 
+         27             <!--<remote ip="192.168.8.40" name="tongbu"/>-->
+         28         </localpath>
+
+    30-36行 认证部分 rsync手工命令的集合
+         30         <rsync>
+         31             <commonParams params="-artuz"/>  命令  -avz..
+         32             <auth start="true" users="rsync_backup" passwordfile="/etc/rsync.password"/>
+         33             <userDefinedPort start="false" port="874"/><!-- port=874 -->
+         34             <timeout start="true" time="100"/><!-- timeout=100 -->
+         35             <ssh start="false"/>
+         36         </rsync>
+    37行  失败写入日志
+         37         <failLog path="/usr/local/sersync/logs/rsync_fail_log.sh" timeToExecute="60"/><!--default every 60mins execut    e once-->
+            当失败后日志记录写入/usr/local/sersync/logs/rsync_fail_log.sh 并且每60分钟对失败的log进行重新同步
+        开启sersync守护进程
+            配置环境变量
+                echo 'export PATH=$PATH:/usr/local/sersync/bin' >> /etc/profile
+                tail -1 /etc/profile
+                source /etc/profile
+                which sersync
+            启动命令
+                sersync -r -d -o /usr/local/sersync/conf/confxml.xml   -r先做一次同步，初始化一次   -d以进程启动   -o指定配置文件
+                    [root@6.8-123 ~]#sersync -r -d -o /usr/local/sersync/conf/confxml.xml 
+                    set the system param
+                    execute：echo 50000000 > /proc/sys/fs/inotify/max_user_watches
+                    execute：echo 327679 > /proc/sys/fs/inotify/max_queued_events
+                    parse the command param
+                    option: -r  rsync all the local files to the remote servers before the sersync work
+                    option: -d  run as a daemon
+                    option: -o  config xml name：  /usr/local/sersync/conf/confxml.xml
+                    daemon thread num: 10
+                    parse xml config file
+                    host ip : localhost host port: 8008
+                    daemon start，sersync run behind the console 
+                    use rsync password-file :
+                    user is rsync_backup
+                    passwordfile is     /etc/rsync.password
+                    config xml parse success
+                    please set /etc/rsyncd.conf max connections=0 Manually
+                    sersync working thread 12  = 1(primary thread) + 1(fail retry thread) + 10(daemon sub threads) 
+                    Max threads numbers is: 32 = 12(Thread pool nums) + 20(Sub threads)
+                    please according your cpu ，use -n param to adjust the cpu rate
+                    ------------------------------------------
+                    rsync the directory recursivly to the remote servers once
+                    working please wait...
+                    execute command: cd /dean && rsync -artuz -R --delete ./  --timeout=100 rsync_backup@192.168.1.121::oldboy --password-file=/etc/rsync.password >/dev/null 2>&1 
+                    [root@6.8-123 ~]#run the sersync: 
+                    watch path is: /dean
+
+        注意发现一个问题：一个confxml.xml文件里的localpath 只生效第一条，多个目录需要配置多个confxml.xml 然后启动，形成多实例
