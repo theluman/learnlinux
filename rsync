@@ -413,4 +413,166 @@ sersync安装配置
                     [root@6.8-123 ~]#run the sersync: 
                     watch path is: /dean
 
-        注意发现一个问题：一个confxml.xml文件里的localpath 只生效第一条，多个目录需要配置多个confxml.xml 然后启动，形成多实例
+        注意发现一个问题：一个confxml.xml文件里的localpath 只生效第一块，多个目录需要配置多个confxml.xml 然后启动，形成多实例
+
+        开机启动
+            设置sersync开机启动一般不加r,文件太多时候很浪费时间
+                sersync -d -o /usr/local/sersync/conf/conf.xml.xm
+
+提示：sersync 同步受硬盘写入速度，网速等限制，批量写入是并不能做到实时无延迟，千兆服务器一般每秒几十个10到100K文件
+    所以sersync 用于海量不行
+
+参数说明
+sersync -r 作用是在开始实时监控目录之前，先进行一次整体同步，将Master端与salve端文件弄成一致，在开始监控,特别说明，如果xml配置文件设置了filter为true,则-r参数无效
+        -o conf.xml-1.xml 指定配置文件路径，可以指定多次，制作成多实例的sersync
+        -n Nun 指定默认线程池的线程总数，不指定情况下，默认是10，如果cpu使用率较高可以降低线程数，如果机器配置较低，可以提高线程数，以提高效率
+        -d  以守护进程方式后台启动，
+        -m PluginName 不进行同步，值运行插件
+        --help没有
+sersync 配置文件说明 xml格式的文件
+    sersync都是通过xml功能实现的
+        注释方式变了,不是#号，是<!-- -->
+              1 <?xml version="1.0" encoding="ISO-8859-1"?>
+              2 <head version="2.5">
+              3     <host hostip="localhost" port="8008"></host>  针对插件的保留字段，不用管
+              4     <debug start="false"/>     是否开启debug，开启后会打印信息，可进行调试，生产不开启，测试开启
+              5     <fileSystem xfs="false"/>  只有xfs文件系统才需要开启此字段
+              6     <filter start="false">    文件过滤功能，sersync会默认过滤系统文件（以.开头 ~结尾的文件），除了这些文件外，在开启此选项进行其他过滤文件自定义设置，相比较rsync的 --exclude功能，此方式过滤在监控时就排除了，大大减少了rsync需要同步的文件数量，提高了效率
+              7         <exclude expression="(.*)\.svn"></exclude>
+              8         <exclude expression="(.*)\.gz"></exclude>
+              9         <exclude expression="^info/*"></exclude>
+             10         <exclude expression="^static/*"></exclude>
+             11     </filter>
+             12     <inotify>        inotify的参数设定（可优化点）对于大多数应用，可以把creatfile设置为false来提高性能，减少rsync通信，因为拷贝文件到监控目录会产生create时间与close_write时间，所以关闭create事件，只监控文件拷贝结束时的事件close_write，同样可以实现完成同步
+注意：要使得createFolder 保持为true,如果将createFolder设为false,则不会对产生的目录进行监控，该目录下的子文件与子目录也不会被监控，所以除非特殊需要，要开启createFolder,默认情况下对创建文件（目录）事件与删除文件（目录）事件都进行监控，如果项目中不需要删除远程目标服务器的文件（目录），则delete参数设置为false就可以了
+             13         <delete start="true"/>
+             14         <createFolder start="true"/>
+             15         <createFile start="false"/>
+             16         <closeWrite start="true"/>
+             17         <moveFrom start="true"/>
+             18         <moveTo start="true"/>
+             19         <attrib start="false"/>
+             20         <modify start="false"/>
+             21     </inotify>
+             22 
+             23     <sersync>
+             24         <localpath watch="/dean"> 监控目录，远程主机，rsync模块设置,注意：此处只有第一块的<localpath></localpath> 是生效的，如果继续添加此类块设定无效，需要重现复制本命名xml文件，并sersync命令开启，形成多实例
+             25             <remote ip="192.168.1.121" name="oldboy"/>
+             26             <remote ip="192.168.1.122" name="oldboy"/>
+             27             <!--<remote ip="192.168.8.39" name="tongbu"/>-->
+             28             <!--<remote ip="192.168.8.40" name="tongbu"/>-->
+             29         </localpath>
+             30         <localpath watch="/dean2"> 此处是无效的设置
+             31             <remote ip="192.168.1.121" name="oldboy"/>
+             32             <remote ip="192.168.1.122" name="oldboy"/>
+             33             <!--<remote ip="192.168.8.39" name="tongbu"/>-->
+             34             <!--<remote ip="192.168.8.40" name="tongbu"/>-->
+             35         </localpath>
+             36         <rsync>  rsync相关设置项
+             37             <commonParams params="-artuz"/>
+             38             <auth start="true" users="rsync_backup" passwordfile="/etc/rsync.password"/>
+             39             <userDefinedPort start="false" port="874"/><!-- port=874 -->
+             40             <timeout start="true" time="100"/><!-- timeout=100 -->
+             41             <ssh start="false"/>
+             42         </rsync>
+             43         <failLog path="/usr/local/sersync/logs/rsync_fail_log.sh" timeToExecute="60"/><!--defaul    t every 60mins execute once-->  失败的脚本配置
+             44         <crontab start="false" schedule="600"><!--600mins-->  定时任务功能，定期整体同步
+             45             <crontabfilter start="false"> 定时过滤功能
+             46                 <exclude expression="*.php"></exclude>
+             47                 <exclude expression="info/*"></exclude>
+             48             </crontabfilter>
+             49         </crontab>
+             50         <plugin start="false" name="command"/>  插件的设置
+             51     </sersync>
+             52 
+
+             53     <plugin name="command">
+             54         <param prefix="/bin/sh" suffix="" ignoreError="true"/>  <!--prefix /opt/tongbu/mmm.sh su    ffix-->
+             55         <filter start="false">
+             56             <include expression="(.*)\.php"/>
+             57             <include expression="(.*)\.sh"/>
+             58         </filter>
+             59     </plugin>
+             60 
+             61     <plugin name="socket">
+             62         <localpath watch="/opt/tongbu">
+             63             <deshost ip="192.168.138.20" port="8009"/>
+             64         </localpath>
+             65     </plugin>
+             66     <plugin name="refreshCDN">
+             67         <localpath watch="/data0/htdocs/cms.xoyo.com/site/">
+             68             <cdninfo domainname="ccms.chinacache.com" port="80" username="xxxx" passwd="xxxx"/>
+             69             <sendurl base="http://pic.xoyo.com/cms"/>
+             70             <regexurl regex="false" match="cms.xoyo.com/site([/a-zA-Z0-9]*).xoyo.com/images"/>
+             71         </localpath>
+             72     </plugin>
+             73 </head>
+
+
+sersync插件的配置使用
+    xml文件中，plugin标签设置为true时候，同步文件或路径到远程服务器之后会调用插件，通过name参数指定需要的执行的插件，目前支持的有command ,refreshCDN,socket,http四种插件，其中http插件由于兼容性目前已经去除，等待重新加入
+    模块也可以单独使用，命令行使用-m 参数即可
+
+    command插件
+         53     <plugin name="command">
+         54         <param prefix="/bin/sh" suffix="" ignoreError="true"/>  <!--prefix /opt/tongbu/mmm.sh su    ffix-->
+         55         <filter start="false">
+         56             <include expression="(.*)\.php"/>
+         57             <include expression="(.*)\.sh"/>
+         58         </filter>
+         59     </plugin>
+ 
+当同步文件完成后，会调用command插件，如同步文件是test.php,则test.php文件在改动之后，调用rsync同步到远程服务器后，调用command插件，执行/bin/sh test.php suffix >/dev/null 2>&1,如果suffix设置了，则会放在inotify事件test.php之后，如果ignoreError为true,则会添加>/dev/null 2>&1，如果设置了command的filter为true，include可以对正则匹配
+
+    refreshCDN 同步后刷新cdn
+    socket插件，开启后，向指定ip与端口发送inotify所产生的文件路径信息
+
+sersync生产场景
+    Sweb静态化服务架构改造实施方案，视频5
+sersync压力测试，生产测试报告
+    sersync同步小文件性能测试报告，视频6，视频7
+        1、查看机器
+            dmidecode|grep 'Product Name'
+        查看cpu型号
+            grep name /proc/cuoinfo
+        查看cpu个（核）数
+            grep 'physical id' /proc/cpuinfo
+        查看cpu使用情况
+            top
+        查看内存情况
+            grep MemTotal /proc/meminfo 
+            free -m   
+        2、
+        知识点：
+            1、什么是并发：
+                并发指两个或多个事件在同一时间间隔内发生，在多道程序环境下，并发性是指在一段时间内宏观上有多少个程序在同时运行，但在单处理机系统中，每一时刻取仅能有一道程序执行，故微观上这些程序只能是分时的交替进行
+                并发是同一时间间隔，在同一时间段内，并发不是时间点，是时间段
+            2、什么是网站并发
+                网站并发一般认为是单位时间内的访问量，这个单位时间未必是1秒，应该是keepalive生存期的链接都算。只要正在连接，没退出，都应该算一个并发，连接建立后，也许1分钟都占着这个链接
+
+            举例子：
+            一个高速公路服务区的厕所，例如有20个坑，假设一次小便时间30秒，那么厕所的并发就是30秒内20人同时小便，并发数20，keepalive时间是30秒,所以./webbench -t 5 -c 10 厕所，并不能压出来瑟缩的并发，webbench是压力工具
+
+如何测试sersync并发
+从Master端写文件，观察salve端文件同步情况，一定时间内达到实时同步临界值时，及认为该数值为并发值，Master端创建文件脚本，看图27
+
+        #!/bin/sh
+        count=200
+        while true
+        do
+        for ((i=1;i<=$count;i++))
+        do
+          /bin/cp 10k.jpg /data0/www/www/$i/10k_`echo $(date)$RANDOM|md5sum |cut -c 1-8`.jpg
+        done
+        sleep 1
+        for ((i=1;i<=$count;i++))
+        do
+          /bin/cp 30k.jpg /data0/www/www/$i/30k_`echo $(date)$RANDOM|md5sum |cut -c 1-8`.jpg
+        done
+        sleep 1
+        for ((i=1;i<=$count;i++))
+        do
+          /bin/cp 50k.jpg /data0/www/www/$i/50k`echo $(date)$RANDOM|md5sum |cut -c 1-8`.jpg
+        done
+        sleep 1
+        done
