@@ -576,3 +576,21 @@ sersync压力测试，生产测试报告
         done
         sleep 1
         done
+通过修改count的值，再去slave端利用tree|wc -l 来同时查看同步情况，也可以写脚本来实现查看功能，来分辨同步的延迟情况
+        #!/bin/bash
+        count=20
+        for ((i=1;i<=$count;i++))
+        do
+          tree /dean/test | wc -l
+          sleep 1
+        done
+  通过此方法可以测算出master端每秒写入多少个文件，slave端可以1秒内正常同步
+    工作中，起码要先写入1000万文件之后，在进行写入同步测试，比较真实
+
+测试报告写法：视频8
+    测试数据通过开启两个交谈窗口，然后敲命令
+        echo -en "`date +%H%M`\t" >> /tmp/tmp.log && tree |wc -l >> /tmp/tmp.log，可以用脚本
+    一定时间后几分钟后，24小时，48小时后，来获得对比的时间及文件数量，最后两个服务器的日志文件paste合成一个，然后awk处理差值，差值小于master端每秒写入的文件数，及任务每秒延迟小，几乎同时同步
+
+sersync 监控，维护，优化
+视频9
