@@ -1,0 +1,100 @@
+nginx 与apache相似
+    三个主要功能：
+        1、高性能的http server
+        2、代理，负载均衡服务器软件
+        3、也可以做缓存服务器
+    nginx 高并发，占用资源少，具备丰富功能特性
+nginx特点：
+    1、web服务器
+        nginx是一个高性能的服务器软件，与apache相比，nginx支持更多的纯静态并发连接，占用资源更少，效率更高,稳定性比apache低一些
+    2、反向代理或负载均衡服务器
+        nginx可以作为http server 或DB等服务器的代理服务器，类似专业的haproxy代理软件的功能，但是功能相对简单，代理功能及效率不如haproxy
+        nginx同时也是一个优秀的邮件代理服务软件（最早开发这个产品的目的之一也是作为邮件代理服务）
+    3、缓存服务器
+        nginx还可以作为缓存服务器使用，类似于专业的缓存软件，如squid
+        nginx的安装简单，配置文件简洁，配置灵活(支持perl语法)
+nginx的HTTP服务器功能的特性：
+    处理静态文件，索引文件以及自动索引，打开文件描述缓存
+    使用缓存加速反向代理，简单负载均衡以及容错
+    远程FastCGI服务的缓存加速支持
+    模块化架构，过滤器包括gzip压缩，ranges支持，chunked响应，XSLT,SSI以及图像缩放，在SSI过滤器中，一个包含多个SSI的页面，如果经由FastCGI或反向代理处理，可被并行处理
+    支持SSL,TLS SNI
+    基于名字和ip的虚拟主机
+    Keep-alive和pipelined的链接支持
+    灵活的配置
+    重新加载配置以及在线升级时，不需要中断正在处理的请求
+    自定义访问日志格式，带缓存的日志写操作以及快速日志轮转
+    3xx-5xx错误代码重定向以及重写（rewrite）模块
+    基于客户端ip地址的http基本认证机制的访问控制
+    支持PUT、DELETE、MKCOL、COPY、以及MOVE的方法，支持FLV和MP4流
+    限制下载及访问速度以及来自同一地址的同时连接数或请求数限制
+nginx优点
+    1、高并发：能支持1-2万甚至更多的并发连接（静态小文件环境下）
+    2、内存消耗少：在3万并发连接下，开启的10个nginx进程消耗不到200M内存
+    3、可以做http反向代理，即负载均衡功能，相当于专业的haproxy软件或lvs的功能
+    4、内置对RS服务器健康检查功能：如果对nginx代理后端某台web服务器宕机，不会影响前段的访问，这个功能还比较弱，需要改进
+    5、通过cache插件（cache_purge）可以实现类squid等专业的缓存软件实现的功能
+        nginx最主要的优点是：支持kqueue(FreeBSD4.1+),epoll(linux2.6+)等网络IO事件模型，由此来支持高并发的连接
+
+nginx主要应用场合
+    web服务器功能
+        使用nginx结合FastCGI运行PHP、JSP等程序
+        使用nginx运行html,js,css,小图片等静态数据等
+    负载均衡反向代理功能
+        使用nginx做反向代理、负载均衡、规则过滤
+    缓存
+        使用nginx加cache插件实现对web服务器缓存功能
+提示：
+    经过实际测试，nginx对于纯静态小文件html页，图片等资源，apache确实要比nginx逊色，但是结合php引擎提供的php服务及其他很多方面并不比nginx差，而apache的稳定性相对要好一些，实际应用中要根据具体业务具体需求来选择
+
+主流web服务产品对比
+apache
+    2.2版本非常稳定强大，2.4版本性能强
+    prefork模式取消了进程创建开销，性能很高
+    处理动态业务数据时，因关联到后端的引擎和数据库，瓶颈不在apache本身
+    高并发时消耗系统资源相对比较多一些
+nginx
+    基于异步IO模型，性能强，能够支持上万并发
+    对于小文件支持很好，性能很高（限静态小文件）
+    代码优美，扩展库必须编译进主程序
+    消耗系统资源比较低
+lighttpd
+    基于异步IO模型，性能和nginx想进
+    扩展库是SO模式，比nginx要灵活
+    全球使用率比以前低，安全性没有上面两个好
+    通过插件（mod_secdownload）可实现文件URL地址加密
+
+通过数据测试对比
+结论：
+    1、处理静态小文件（小于1M），nginx和lighttpd比apache更有优势，lighttpd最强
+    2、处理动态数据时，三者差距不大，apache更有优势一点，这是因为处理动态数据的能力取决于php和后端数据库的提供服务能力，也就是说瓶颈不在web服务器上，一般php支持的并发参考值300-1000，java引擎300-1000
+
+为什么nginx的总体性能比apache高?
+    nginx使用最新的epoll(linux2.6内核)和kqueue(freebsd)网络IO模型，而apache则使用传统的select模型，目前linux下能够承受高并发访问的squid，Memcached都采用的是epoll网络IO模型
+    处理大量链接的读写，apache所采用的select网络IO模型比较低效，下面用一个比喻来解析apache-select，和nginx-epoll的区别
+        假设你在大学读书，住的宿舍有很多房间，你的朋友来找你，select版大妈就会带着你的朋友挨个房间找，直到找到。而epoll版大妈会先记下每个进入的人的房间号，你朋友来后，直接告诉房间号，效率高
+
+如何正确选择web服务器：
+    静态业务：采用nginx或lighttpd
+    动态业务：采用nginx和apache均可
+    动态业务可以由前端代理（haproxy）,根据页面元素类型，向后转发相应的服务器进行处理
+        如果并发不是很大，有对apache很熟悉，采用apache就可以
+提示：nginx做web（apache,lighttpd）、反向代理（haproxy,lvs nat） 及缓存服务器（squid）也是不错的    既有静态业务又有动态业务：
+        nginx,apache(可以这样选，但是学习成本，维护成本大，最好选择单一软件，根据访问量决定)
+
+nginx安装,两种方法
+1、rpm方式，默认nginx软件包不在yum软件仓库中，需要去官网下载rpm包，http://nginx.org/en/download.html,http://nginx.org/download/nginx-1.10.1.tar.gz,然后rpm命令安装
+    为了支持gzip和rewrite的正则，确认zlib,zlib-devel.pcre已经装好
+        yum install zlib zlib-devel pcre -y
+    然后安装下载到的rpm包
+        rpm -ivh nginx-1.10.1.1xxxx.rpm
+    配置文件
+        /etc/nginx/nginx.conf(rpm安装情况下)
+    主目录
+        /usr/share/nginx/html(rpm安装情况下)
+    查看版本
+        /usr/sbin/nginx -v
+    对配置文件语法检查
+        /usr/sbin/nginx -t
+    启动
+        /etc/init.d/nginx start
