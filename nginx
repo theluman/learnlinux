@@ -501,8 +501,180 @@ ifconfig eth0:0 192.168.1.128/24 up  重启失效，永久生效需要写入配�
             #log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
             #                  '$status $body_bytes_sent "$http_referer" '
             #                  '"$http_user_agent" "$http_x_forwarded_for"';
+                main,combined等是日志级别，需要看文档
         
             #access_log  logs/access.log  main;------main是调用log_format里的main 这两个要一至
     http://nginx.org/en/docs/http/ngx_http_log_module.html#access_log
 
+            日志格式各项含义
+                $remote_addr 客户端ip地址
+                $remote_user 客户端用户名
+                $time_local  记录访问时间及时区
+                $request     用户的请求，使用的http协议
+                $status     返回状态码，200,304,404等
+                $body_bytes_sent   发送的body字节数
+                $http_referer    引用页（从哪个链接访问来的）
+                $http_user_agent  客户端浏览器
+                $http_x_forwarded_for 客户端ip地址，代理服务器地址等
+日志轮询
+    工作场景通过写脚本实现日志轮询
+    vim cut_nginx.sh
+        #!/bin/bash
+        /bin/mv ip_access.log ip_access_$(date +%F).log
+        /bin/mv eee_access.log eee_access_$(date +%F).log
+        /bin/mv eee2_access.log eee2_access_$(date +%F).log
+        /usr/local/nginx/sbin/nginx -s reload
+    然后crontab定时任务
+        00 00 * * * /bin/sh /tmp/cut_nginx.sh >/dev/null 2>&1
+    也可以详细丰富脚本功能，详细判断，rsync推送等
 
+日志数据筛选处理
+    1、取出访问客户端ip地址，按访问量排序，（百度面试题）
+        日志文件内容第一字段包含多个ip,对其进行数量排序
+    此类问题为工作中最常见问题，可以演变成分析日志，查看TCP各个状态连接数，查看ip连接数排名等等
+            192.168.1.107
+            192.168.1.107
+            192.168.1.106
+            192.168.1.107
+            192.168.1.104
+            192.168.1.107
+            192.168.1.107
+            192.168.1.108
+            192.168.1.107
+            192.168.1.107
+            192.168.1.117
+            192.168.1.127
+            192.168.1.137
+        法一：cut切割 |sort 排序| uniq -c 计数
+        法二：awk切割 |sort排序 |uniq -c计数
+        法三：sed替换关键符号等| sort排序 |uniq -c计数
+        法四：cat读入 |tr 分割替换|grep 选择关键字行|sort 排序|uniq -c 计数
+        法五：sed +完全正则匹配 |sort|uniq -c
+              awk 数组方式|sort|uniq -c
+        法六：awk+数组+循环for等
+        法。。。很多
+        好文章图37
+
+nginx日志分析软件 awstats 自行研究
+
+nginx别名在server_name 后面添加虚拟主机域名即可，用于负载均衡的健康检查识别机器
+虚拟主机状态信息添加
+nginx.conf
+    #添加虚拟主机状态
+    server {
+        listen       80;
+        server_name  status.eee.com;
+        location / {
+            stub_status on;
+            access_log off;
+        }
+    }
+
+Active connections: 2 ------------------------- nginx 正在处理的活动连接数2个
+server accepts handled requests-----------------server表示nginx从启动到现在共处理了多少个链接，accepts表示nginx启动到现在共创建了多少次握手（请求丢失数=（握手数-连接数），可以看出来还没有请求丢失），handled requests表示总共处理了多少次请求
+ 72 72 86 
+Reading: 0 Writing: 1 Waiting: 1 ------------- reading表示nginx读取到客户端的header信息数，writing表示nginx返给给客户端的header数，waiting表示已经处理完正在等候下一次请求指令的驻留连接，在开启keep-alive的情况下，这个值等于active-(reading+writing)
+
+补充：也可以用location的方式实现状态信息配置，可以限制ip访问
+    nginx.conf
+     server{   
+        listen  80;
+        location / {
+            stub_status on;
+            access_log off;
+            allow 192.168.1.197;-------允许
+            deny all;------------------禁止
+        }
+      }
+
+优化nginx配置文件
+1、利用include 将nginx.conf 与server的配置到分开，虚拟主机很多的情况下便于管理为维护
+cd /usr/local/nginx/conf
+mkdir extra
+vim nginx
+    
+worker_processes  8;
+error_log /tmp/logs/err.log  crit;
+events {
+    worker_connections  1024;
+    use epoll;
+}
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile        on;
+    keepalive_timeout  65;
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                        '$status $body_bytes_sent "$http_referer" '
+                        '"$http_user_agent" "$http_x_forwarded_for"';
+    include extra/http_vhosts.conf;-----------------利用包含
+}
+
+http_vhosts.conf
+#ip
+    server {
+        listen       80;
+        server_name  127.0.0.1 localhost;
+        location / {
+            stub_status on;
+            access_log off;
+        }
+    }
+#www_eee_com
+    server {
+        listen       80;
+        server_name  www.eee.com eee.com;
+        location / {
+            root   html/www;
+            index  index.html index.htm;
+        }
+        access_log  /tmp/logs/eee_access.log  main;
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   html;
+        }
+    }
+
+2、nginx expires 服务端文件在客户端缓存存在多久
+    expires 12h;  一般用于设置html，图片，js,css,xml缓存对象
+        http://nginx.org/en/docs/http/ngx_http_core_module.html
+    范例1：
+        location ~ .*\.(gif|jpg|jpeg|png|bmp|swf)$
+        {
+            expires 3650d;
+        }
+    范例二：
+        location ~ .*\.(js|css)?$
+        { 
+            expires 30d; 
+
+#www_eee_com
+    server {
+        listen       80;
+        server_name  www.eee.com eee.com;
+        location / {
+            root   html/www;
+            index  index.html index.htm;
+        }
+        location ~ .*\.(gif|jpg|jpeg|png|bmp|swf)$
+        {
+                expires 3650d;---------（y年，d天，s秒）
+                root html/www;
+        }
+        access_log  /tmp/logs/eee_access.log  main;
+        error_page   500 502 503 504  /50x.html;
+        location = /50x.html {
+            root   html;
+        }
+    }
+
+        }
+location ~ 要优先于location /格式
+    查看expires效果，服务端用curl -I 查看
+    客户端用火狐浏览器 firebug+yslow插件查看
+    还可以根据目录添加缓存，目录内的所有文件都会被缓存
+    还可以设置单个文件添加缓存
+        等待apache视频回来添加
+做长时间缓存可以省带宽，51cto中小网站代表，做的不够好
+3、nginx gzip
+4、nginx rewrite
