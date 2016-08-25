@@ -117,6 +117,7 @@ nginx的工作模式是1个master进程+N个woker进程
 
 编译安装nginx
     到目前为止，还未发现操作系统盘自带或者yum可以直接通过rpm包安装方法安装nginx的情况，如果大规模的安装可以定制rpm来安装
+    0、查看是否安装zlib,zlib-devel 是支持nginx的gzip模块的库，一般是安装的
     1、安装nginx所需的pcre库（perl兼容正则表达式），www.pcre.org,安装pcre库是为了使nginx支持http rewrite模块
         mkdir -p ~/tools
         cd ~/tools
@@ -676,5 +677,23 @@ location ~ 要优先于location /格式
     还可以设置单个文件添加缓存
         等待apache视频回来添加
 做长时间缓存可以省带宽，51cto中小网站代表，做的不够好
+    不希望被缓存的内容
+        1、广告图片
+        2、网站流量统计文件
+    企业网站缓存日期查看
+        jd sina taobao google
+expires 可以节省带宽 提升用户体验
 3、nginx gzip
+    降低带宽，提升访问速度
+    http://nginx.org/en/docs/http/ngx_http_gzip_module.html
+        gzip on;
+        gzip_min_length 1k;------设置允许压缩页面的最小字节数，默认值0，全部压缩，设置成1k，即1k以下不压缩
+        gzip_buffers 4 16k;--缓冲区大小，4 16k表示申请4个单位为16k的内存作为压缩结果流缓存
+        gzip_http_version 1.0;---压缩版本（默认1.1，前端为squid2.5时用1.0）用于设置识别http协议版本
+        gzip_comp_level 2;----压缩比率，指定gzip压缩比，1最小，处理速度最快，传输速度最慢，消耗cpu小；9最大，传输速度最快，但处理也最慢，比较消耗cpu
+        gzip_types text/plain application/x-javascript text/css application/xml;----指定压缩类型，图片视频不用压缩，本身就是压缩的
+        gzip_vary on;------vary header支持，该选项可以让前端的缓存服务器缓存经过gzip压缩的页面，例如使用squid缓存经过nginx压缩的数据
+        需要压缩的对象：
+            大于1k的纯文本文件，图片和视频等不要压缩，因为不但不会减小，在压缩事还会消耗cpu,mem资源
 4、nginx rewrite
+5、优雅显示
