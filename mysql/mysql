@@ -1,0 +1,84 @@
+安装
+rpm方式 yum imstall
+编译方式
+    1、添加mysql用户组
+        groupadd mysql
+    2、添加mysql用户
+        useradd mysql -M -s /sbin/nologin -g mysql
+    3、yum install -y ncurses-devel(也可以先不出，编译出错后在装)
+    4、下载解压软件
+        cd ~/tools
+        wget http://downloads.mysql.com/archives/get/file/mysql-5.1.72.tar.gz
+        tar xf mysql-5.1.72.tar.gz
+        cd mysql-5.1.72
+    5、编译
+        sudo su -
+
+        ./configure --prefix=/usr/local/mysql-5.1.72/ --with-unix-socket-path=/usr/local/mysql-5.1.72/mysql.sock --localstatedir=/usr/local/mysql-5.1.72/data --enable-assembler --with-mysqld-ldflags=-all-static --with-client-ldflags=-all-static --enable-thread-safe-client --with-mysqld-user=mysql --with-big-tables --without-debug --with-pthread
+
+        make && make install
+
+        参数含义：
+        --prefix=/application/mysql  设置mysql安装路径，默认为..
+        --with-unix-socket-path=/usr/local/mysql-5.1.72/mysql.sock  指定mysql socket文件存放目录
+        --localstatedir=/usr/local/mysql-5.1.72/data  设定mysql的数据文件存放位置
+        --enable-assembler   允许使用汇编模式（优化性能）
+        --with-mysqld-ldflags=-all-static   服务器使用静态库（优化性能）
+        --with-client-ldflags=-all-static   客户端使用静态库（优化性能）
+        --enable-thread-safe-client  以线程方式编译客户端
+        --with-mysqld-user=mysql    指定mysql运行的系统用户
+        --with-big-tables      支持big table
+        --without-debug          使用非debug模式
+        --with-pthread            强制使用pthread线程序库编译
+    6、ln -s /usr/local/mysql-5.1.72 /usr/local/mysql
+    7、获取配置文件
+        ll ~/tools/support-files/*.cnf
+            [root@6.4-121 mysql-5.1.72]#ll support-files/*.cnf
+            -rw-r--r--. 1 root root  4734 Aug 29 15:51 support-files/my-huge.cnf
+            -rw-r--r--. 1 root root 19769 Aug 29 15:51 support-files/my-innodb-heavy-4G.cnf
+            -rw-r--r--. 1 root root  4708 Aug 29 15:51 support-files/my-large.cnf
+            -rw-r--r--. 1 root root  4719 Aug 29 15:51 support-files/my-medium.cnf
+            -rw-r--r--. 1 root root  2487 Aug 29 15:51 support-files/my-small.cnf
+        生产环境一般用large 或huge 或heavy
+        cp ~/tools/support-file/my-large.cnf /etc/my.cnf
+
+    8、mkdir -p /usr/local/mysql/data
+        chown -R mysql.mysql /usr/local/mysql
+    9、/usr/local/mysql/bin/mysql_install_db --basedir=/usr/local/mysql/ --datadir=/usr/local/mysql/data --user=mysql
+            
+[root@6.4-121 bin]#./mysql_install_db --basedir=/usr/local/mysql --datadir=/usr/local/mysql-5.1.72/data/ --user=mysql
+Installing MySQL system tables...
+160829 16:53:32 [Warning] '--skip-locking' is deprecated and will be removed in a future release. Please use '--skip-external-locking' instead.
+OK
+Filling help tables...
+160829 16:53:32 [Warning] '--skip-locking' is deprecated and will be removed in a future release. Please use '--skip-external-locking' instead.
+OK
+
+To start mysqld at boot time you have to copy
+support-files/mysql.server to the right place for your system
+
+PLEASE REMEMBER TO SET A PASSWORD FOR THE MySQL root USER !
+To do so, start the server, then issue the following commands:
+
+/usr/local/mysql/bin/mysqladmin -u root password 'new-password'
+/usr/local/mysql/bin/mysqladmin -u root -h 6.4-121 password 'new-password'
+
+Alternatively you can run:
+/usr/local/mysql/bin/mysql_secure_installation
+
+which will also give you the option of removing the test
+databases and anonymous user created by default.  This is
+strongly recommended for production servers.
+
+See the manual for more instructions.
+
+You can start the MySQL daemon with:
+cd /usr/local/mysql ; /usr/local/mysql/bin/mysqld_safe &
+
+You can test the MySQL daemon with mysql-test-run.pl
+cd /usr/local/mysql/mysql-test ; perl mysql-test-run.pl
+
+Please report any problems with the /usr/local/mysql/scripts/mysqlbug script!
+
+[root@6.4-121 bin]#
+
