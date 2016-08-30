@@ -44,7 +44,8 @@ rpm方式 yum imstall
 
     8、mkdir -p /usr/local/mysql/data
         chown -R mysql.mysql /usr/local/mysql
-    9、/usr/local/mysql/bin/mysql_install_db --basedir=/usr/local/mysql/ --datadir=/usr/local/mysql/data --user=mysql
+    9、初始化数据库
+        /usr/local/mysql/bin/mysql_install_db --basedir=/usr/local/mysql/ --datadir=/usr/local/mysql/data --user=mysql
             
 [root@6.4-121 bin]#./mysql_install_db --basedir=/usr/local/mysql --datadir=/usr/local/mysql-5.1.72/data/ --user=mysql
 Installing MySQL system tables...
@@ -82,3 +83,28 @@ Please report any problems with the /usr/local/mysql/scripts/mysqlbug script!
 
 [root@6.4-121 bin]#
 
+    10、cp ~/tools/mysql-5.1.72/support-files/mysql.server /usr/local/mysql/bin/
+        chown mysql.mysql /usr/local/mysql/bin/mysql.server
+        chmod 755 /usr/local/mysql/bin/mysql.server
+        /usr/local/mysql/bin/mysql.server statr
+        lsof -i :3306
+        将mysql命令路径加入到环境变量
+            [root@6.4-121 bin]#vim /etc/profile
+            [root@6.4-121 bin]#. /etc/profile
+            [root@6.4-121 bin]#echo $PATH
+            /usr/local/mysql/bin/:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/root/bin
+            [root@6.4-121 bin]#
+
+    11、mysql 登录，查看当前用户
+        mysql
+        select user();
+
+    12、mysql改密码
+       /usr/local/mysql/bin/mysqladmin -u root password 'new-password'
+    13、查看并清理多余用户
+        help drop user;
+        查看所有用户
+        select user,host from mysql.user;
+            mysql> drop user ''@'localhost';
+            Query OK, 0 rows affected (0.00 sec)
+            flush privileges;
