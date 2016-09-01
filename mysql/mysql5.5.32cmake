@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
 源码cmeka编译mysql5.5.32
         sudo su -
     yum安装gcc gcc-c++
@@ -80,3 +83,4 @@ Please report any problems with the /usr/local/mysql/scripts/mysqlbug script!
         mysql
     查看mysql用户的权限
         show grants for 'root'@'localhost'; 
+'''

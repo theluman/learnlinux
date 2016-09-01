@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
+mysql 备份恢复
+1、准备工作，建表填充数据
+字符集 mysql 5.1
+create database dong_test;------相当于拉丁字符集
+create database dong_test default character set gbk collate gbk_chinese_ci; ---gbk字符集
+create database dong_test default character set utf8 collate utf8_general_ci;---utf8字符集
+提示：字符集不一致是数据库乱码的罪魁祸首
+    服务器本身字符集
+    操作系统的字符集
+    数据库服务端字符集
+    库和表的字符集
+    客户端软件的字符集
+都要对应上，不然容易乱码
+
+如果编译时候指定了默认字符集，那么
+    create table dong_test;和create database dong_test default character set gbk collate gbk_chinese_ci;方式是等价的
+
+system 命令 临时跳出mysql 执行命令 类似vim !command
+
+mysql> source test.sql 让sql语句文件执行 或 mysql -uroot -p'123456' test < test.sql
+
+set names gbk;---设置字符集
+
+一般在sql文件前边加上set names gbk;防止导入数据乱码
+
+小结：mysql 插入中文不乱码方法
+    1、在文件中指定 set names gbk;然后登录mysql,通过source test.sql
+    2、在文件中指定set names gbk;然后通过mysql 命令插入数据，mysql -uroot -p'password' test < test.sql
+        查看方法mysql -uroot -p'password' -e "set names gbk;select * from test.test;"
+    3、mysql -uroot -p'password' --default-character-set=gbk test < test.sql
+
+mysql字符集介绍
+mysql 字符集包括字符集 character和校对规则 collation ,字符集定义字符串存储方式，校对规则定义比较字符串的方法
+
+常见字符集 
+GBK 定长，双字节，不是国际标准，广泛支持
+UTF-8 非定长，1-4字节，广泛支持，mysql也支持
+latin1  mysql5.1以前的默认字符集
+
+如何选择合适的字符集：
+1、如处理各种各样文字，发布到不同语言国家地区，应选Unicode，utf-8每个汉字三字节
+2、如需支持中文，数据量大，性能要求高，可选gbk(定长，每个汉字占双字节，英文也是占双字节）
+    提示：如需大量运算，比较排序等，定长字符集更快，性能高
+
+mysql可支持多种字符集，同一台机器，库和表的不同字段都可以指定不同的字符集
+
+show character set; -- 查看mysql支持的字符集
+
+set names gbk;命令到底在做什么？
+mysql>show variables;
+show variables like '%character_set%';
+    mysql> show variables like '%character_set%';
+    +--------------------------+-----------------------------------------+
+    | Variable_name            | Value                                   |
+    +--------------------------+-----------------------------------------+
+    | character_set_client     | utf8  客户端字符集  set names gbk;      |
+    | character_set_connection | utf8  链接的字符集  set names gbk;      |
+    | character_set_database   | utf8   数据库，配置文件指定或建库指定   |
+    | character_set_filesystem | binary     文件系统                     |
+    | character_set_results    | utf8        返回结果    set names gbk;  |
+    | character_set_server     | utf8       服务端    配置文件指定       |
+    | character_set_system     | utf8       系统                         |
+    | character_sets_dir       | /usr/local/mysql-5.5.32/share/charsets/ |
+    +--------------------------+-----------------------------------------+
+    8 rows in set (0.00 sec)
+    
+    mysql> 
+set names gbk;就是把上述三个地方更改了，更改my.cnf客户端模块参数后，可以实现set names gbk效果，且永久生效，无需重新服务端，客户端退出重新登录就生效
+    [client]
+    default-character-set=gbk
+
+更改服务端字符集简单办法：
+    [mysqld]
+    #default-character-set=gbk----适合mysql5.1
+    character-set-server=gbk-----适合mysql5.5
+mysqld设置会修改character_set_database和 character_set_server 两处的值，重启mysql服务生效,y有的mysql不支持这个设置
+
+小结：
+1、mysql5.1及以前版本my.cnf配置文件[mysqld]模块下添加字符集配置，生效后，会修改会修改character_set_database和 character_set_server 两处的值,mysql5.5上，命令有点变化
+2、客户端字符集先设置 set names gbk;可以确保插入中文后，不出现乱码，对执行set names gbk；前插入的中文无效
+3、在my.cnf配置文件[client]模块下添加字符配置，生效后，相当于set names gbk;的效果，更改的是character_set_client，character_set_connection，character_set_results 三处的值
+
+备份单个数据库：
+数据丢失和网站7*24小时丢失哪个更重要？都很重要，公司不同，具体看业务
+    mysqldump --help
+    普通备份 -B指令是加入建库命令，切到数据库命令，还原简单
+    mysqldump -uroot -p'xianghong379' -B dongwei > ~/dongwei_$(date +%F).sql
+    压缩备份
+    mysqldump -uroot -p'xianghong379' -B dongwei|gzip > ~/dongwei_$(date +%F).sql.gz
+    
+恢复
+    mysql -uroot -p'xianghong379' < ~/dongwei_2016-08-31.sql------未压缩备份
+    gunzip < dongwei_2016-08-31.sql.gz|mysql -uroot -p'xianghong379'----压缩备份的
+
+备份多格库 -B
+-B 是关键参数，连接多格库，并增加create database DB_NAME,use DB_NAME
+    备份
+    mysqldump -uroot -p'xianghong379' -B dongwei1 dongwei2|gzip > ~/dongwei_$(date +%F).sql.gz
+    恢复
+    mysql -uroot -p'xianghong379' < ~/dongwei_2016-08-31.sql ---未压缩
+    gunzip < dongwei_2016-08-31.sql.gz | mysql -uroot -p'xianghong379' ---压缩过的
+    
+多个库分库备份就一一备份，写脚本实现
+
+备份单个表：
+    mysqldump -uroot -p'xianghong379' dongwei student|gzip > student.sql.gz
+备份多个表：
+    mysqldump -uroot -p'xianghong379' dongwei student course sc|gzip > student.sql.gz
+分表备份：
+    单表备份命令进行多次操作，脚本实现
+
+备份数据库结构-d
+    mysqldump -uroot -p'xianghong379' -d dongwei > dong_jiegou.sql---库结构
+    mysqldump -uroot -p'xianghong379' -d dongwei student > dong_jiegou.sql---表结构
+让备份少一些注释项，少一些垃圾内容 --compact
+    mysqldump -uroot -p'xianghong379' --compact -d dongwei > dong_jiegou.sql
+
+恢复
+source恢复
+    mysql>source xxxx.sql 默认是登录mysql之前的路径
+mysql命令恢复 最标准的,如果备份时使用—B参数，恢复时无需指定恢复到哪个数据库
+    mysql -uroot -p'xianghong379' < ~/dongwei_2016-08-31.sql ---未压缩
+    gunzip < dongwei_2016-08-31.sql.gz | mysql -uroot -p'xianghong379' ---压缩过的    
+非交互式操作mysql -e 参数
+    mysql -uroot -p'xianghong379' -e 'use dongwei;select * from student;'
+    mysql -uroot -p'xianghong379' -e 'show processlist;'--查看mysql正在执行的语句，长时间存在的语句就是需要优化的
+    mysql -uroot -p'xianghong379' -e 'show full processlist;'---显示更全的命令
+    mysql -uroot -p'xianghong379' -e 'show variables;'----查看变量
+    mysql -uroot -p'xianghong379' -e 'show global status;'----查看全局状态
+    
+生产常用的命令
+    show global status;
+    show processlist;
+    show full processlist;
+    set global key_buffer_size = 32777218
+    show variables;
+mysql sleep 过多的问题
+    谷歌 百度
+
+

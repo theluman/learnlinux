@@ -1,0 +1,222 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
+1、DQL 数据查询语言
+    用以从表中获得数据，确定数据怎样给出，保留字select是DQL（也是所有sql）用的最多的动词，其他常用的还有where,order by,group by和having
+2、DML 数据操作语言
+    其语句包括动词有insert,update和delete，它们分别用于添加，修改和删除表中的行
+3、事务处理语句 TPL
+    它的语句能确保DML语句影响的表的所有行及时得以更新，TPL语句包括begin transaction,commit,rollback
+4、数据控制语言 DCL
+    它的语句通过grant或revoke获得许可，确定单个用户和用户组对数据库对象的访问，某些rdbms可用grant或revoke控制对表的单个列的访问
+5、数据定义语言 DDL
+    其语句包括动词create 和drop。在数据库中创建新表或删除表（create table或drop table）;为表加入
+索引等。DDL包括许多从数据库目录中获得数据有关的保留字
+6、指针控制语言 CCL
+    它的语句，像declare cursor,fetch into和update where current 用于对一个或多个表单独行中的部分数据的操作
+
+常用分类方法
+    DDL 数据定义语言 create,alter,drop
+    DML 数据操作语言 select,insert,delete,update
+    DCL 数据控制语言 grant,revoke,commit,rollback
+
+创建数据库
+help create database;
+    create database dongwei;
+    create database dongwei_gbk default character set gbk collate gbk_chinese_ci;
+    create database dongwei_utf8 default character set utf8 collate utf8_general_ci;
+show character set;  查看支持的字符集,及对应的校对规则
+提示：字符集不一定是数据库乱码的唯一原因
+字符集用来定义mysql字符串的存储方式，校对规则定义了比较字符串的方式
+
+显示数据库
+help show;
+help show database;
+    show databases;
+    show databases like 'dong%';
+    show create database dongwei; 默认是latin1拉丁字符集
+select database();  查看当前数据库  相当于pwd
+select user();查看当前用户 相当于whoami
+select version();
+删除数据库
+help drop;
+help drop database;
+    DROP {DATABASE | SCHEMA} [IF EXISTS] db_name
+
+链接数据库
+help use;
+    use dongwei_utf8;  相当于cd命令
+
+查看表
+help show tables;
+    show dongwei_utf8;
+    show tables from mysql like 'time%';
+
+删除账号
+help drop user; 
+如果大写内容删除不掉，使用 delete from mysql.user where user='root' and host='C58'; flush privileges;
+
+创建用户并赋予权限（两方法）
+help grant;
+1、先建用户及密码，然后在授权
+    create user 'dong'@'localhost' identified by 'new_password';
+flush privileges;
+select user,host,password from mysql.user;
+show grants for 'dong'@'localhost';
+    grant all on dongwei_utf8.* to 'dong'@'localhost';
+flush privileges;
+2、直接授权法（用户及密码同时创建）
+    grant all on dongwei_utf8.* to 'dong1'@'localhost' identified by 'new_password';
+
+grant all privileges 手动测试到底有哪些权限？
+help revoke;
+REVOKE INSERT ON *.* FROM 'jeffrey'@'localhost';
+    revoke insert on dongwei_utf8.* from 'dong1'@'localhost';
+    show grants for 'dong1'@'localhost';
+        | GRANT SELECT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER ON `dongwei_utf8`.* TO 'dong1'@'localhost' |      
+    再补上insert 就是grant all privileges 的包含的所有权限
+        | GRANT INSERT, SELECT, UPDATE, DELETE, CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER ON `dongwei_utf8`.* TO 'dong1'@'localhost' |
+
+生产环境一般
+主库只授权select,insert,update,delete
+    特殊情况下给create,drop 并及时收回   
+从库只授权select
+
+    生产中可以写库，读库的用户名密码都一样，只是ip不同，授权不同
+
+创建表
+help create table;
+    create table test(id int(4) not pull primary key auto_increment comment '主键',name char(20) not null);
+show tables;
+show create table test\G
+    \G后面无需加分号
+    comment '主键' 这是注释
+
+字段类型 常见
+1、int[(M)] 正常大小整数类型
+2、double(M,D] [zerofill] 正常大小（双精度）浮点数字类型
+3、date日期类型，支持范围是1000-01-01到9999-12-31 mysql以YYYY-MM-DD来显示DATE的值，但是允许你使用字符串或数字把值赋给date列
+4、char(M) 定长字符串类型，当存储时，总是用空格填满右边到指定的长度
+5、blob text   最大长度65532（2^-1)个字符
+6、varchar 变长字符串类型
+
+数字类型 需要的存储量（单位字节）
+tinyint 1
+smallint 2
+mediumint 3
+int 4
+integer 4
+bigint 8
+float(x) 4 if x<=24 or 8 if 25 <= x <= 53
+float 4
+double 8
+double percision 8
+real 8
+decimal(M,D) M字节（D+2,if M < D)
+numeric(M,D) M字节（D+2，if M <D）
+
+日期和时间类型 需要的存储量（单位字节）
+date 3
+datetime 8
+timestamp 4
+time 3
+year 1
+
+串类型 需要的存储量（单位字节）
+char(M)  M字节，1 <= M <= 255
+varchar(M) L+1字节，在此 L <= M and 1 <=M <= 255
+tinyblob,tinytext L+1字节 L < 2^8
+blob,text L+2字节 L<2^16
+mediumblob,mediumtext L+3字节 L<2^24
+longblob,longtext L+4字节，L<2^32
+enum('value1;,'value2',...) 1或2字节，取决于枚举值的数目（最大值65535）
+set('value1','value2',...) 1,2,3,4或8个字节，取决于集合成员的数量（最多64个成员）
+
+对表的操作，以gbk格式的dongwei库为例
+    建立测试表test
+    create table test(id int(4) not null primary key auto_increment,name char(20) not n    ull);
+
+查看表结构
+help desc;
+    desc test;
+    show columns from test;
+
+为字段创建索引
+    索引就像书的目录一样，如果在字段上建立了索引，那么以索引列为查询条件时可以加快查询速度，这是mysql优化的重要内容之一
+    按主键查询是最快的，primary key(`id`),  每个表只能有一个主键，但是可以有多个索引，主键要求列的内容是唯一的，索引不要求唯一
+    法一：建表时建立索引
+        create table test(id int(4) not null primary key auto_increment,name char(20) not null,index index_name (name))
+show create table test;
+show index from test;
+alter table test drop index index_name;
+    法二：建表后添加索引
+        alter table test add index index_name (name); 可以创建主键索引
+        create index index_name on test(name); 此方法不能创建主键索引
+
+为表建立主键
+    alter table test add primary key(id)
+    alter table test drop primary key;
+前提是自增列必须有主键，自增列主键不能被删除，非自增列可以删除主键
+
+因为更新数据时还需要维护索引，所以我们不能给所有的列都建立索引，尽量选择在唯一值多的大表上建立索引，几百上千数据的小表上不要建立索引 select user,host from mysql.user where host=..., 索引要建在条件列，而不是选择的列，即where后面的列，这样才能加快速度
+
+插入数据：
+    insert into test(id,name) values (0001,'chao');
+select * from test;
+    insert into test(name) values ('yue');
+    insert into test values (003,'dong');
+每次插入都有I/O操作，为了减少I/O操作，可以批量插入数据，提升效率
+    insert into test values (004,'huang'),(5,'hai'),(6,'long');
+
+备份数据
+    mysqldump -uroot -p'xianghong379' -B dongwei > /mnt/tmp.sql
+        mysqldump 称为逻辑备份，将数据库以sql语句方式导出，备份，-B选项在开头加入了 use DB_NAME一行
+
+查询
+单表查询
+select 
+    select * from test;  查询所有数据
+    select * from test limit 2; limit 2等价于 limit 0,2 从第0+1条开始查询，查询2条
+    select * from test limit 2,4; 从第2+1条开始查询，查询4条
+    seletc * from test order by id; 查询所有按id排序,默认递增asc
+    seletc * from test order by id desc; 查询所有按id排序，desc 倒序
+    seletc * from test order by id limit 1,5; 查询所有按id排序,从第2条开始，检索5条
+    select * from test where id=6; 增加查询条件
+    select * from test where name='luo'; 增加查询条件
+    select * from test where name='luo' and id=8; 组合条件 
+    select * from test where name='luo' or id=7; 组合条件
+    select * from test where 3<id and id<7; 组合条件
+多表查询 查询的内容分布于多个表，条件就是多个表中有相同的字段，利用相同的字段相等，列出信息
+    建立关联表
+    create table student(sno int(10) not null comment'xuehao' primary key,sname varchar(16) not null comment 'xingming',sex char(2) not null comment 'xingbie',age tinyint(2) not null default 0 comment 'nianling',dept varchar(16) default null comment 'xibie',index index_name (name));
+    create table course(cno int(10) not null,cname varchar(64) not null,ccredit tinyint(2) not null,primary key(cno));
+    create table sc(scid int(12) not null auto_increment,cno int(10) not null,sno int(10) not null,grade tinyint(2) not null,primary key(scid));
+
+查看每个学生所修学分总和 语句为：
+法一：
+mysql> select sname,sum(grade) from student a,sc b where a.sno=b.sno group by sname;
+        查询 学生名字，学分总和 从sc表 起别名a，从student表 起别名b 条件是 a.sno字段和b.sno字段相同的部分,group by 分组统计功能,也可以不起别名
+        group by 一般和聚合函数一起使用才有意义,比如 count sum avg等,使用group by的两个要素:  (1) 出现在select后面的字段 要么是聚合函数中的,要么是group by 中的.  (2) 要筛选结果 可以先使用where 再用group by 或者先用group by 再用having 
+
+提示：以上写法有些问题，如果sname的内容不唯一，在不唯一的列上group by会出问题
+
+法二：
+利用中间表,嵌套查询
+mysql> select sno,sum(grade) sumgrade from sc group by sno;
+以上是分解下面的半句
+mysql> select sname,sumgrade from student a,(select sno,sum(grade) sumgrade from sc group by sno) b where a.sno=b.sno order by sumgrade desc;
+
+提示：此方法sno是唯一的，可以group by
+
+重要项：如何查看select项是否使用了索引 使用explain
+    explain select * from test where id=6\G
+
+表中增删改字段（dba操作）一般是开发整理好给运维，运维执行
+help alter
+    alter table test add 字段 类型 其他；
+        alter table add sex char(4);
+        alter teble add age int(4) after name;
+        alter .. change
+
+更改表名字：
+    rename table 原表名 to 新表名；

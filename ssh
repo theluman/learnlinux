@@ -1,4 +1,6 @@
-
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
 几款优秀的画图工具
     edraw freemid viso ppt  排版用word
 ssh服务提供两个服务功能
@@ -255,5 +257,4 @@ ssh慢的常见问题
             一般是hosts文件的127.0.0.1和主机名不对应导致的
             sshd.conf 配置文件的验证没有取消掉
         解决以上即可
-
-
+'''

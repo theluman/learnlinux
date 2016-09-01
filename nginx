@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
 nginx 与apache相似
     三个主要功能：
         1、高性能的http server
@@ -697,3 +700,4 @@ expires 可以节省带宽 提升用户体验
             大于1k的纯文本文件，图片和视频等不要压缩，因为不但不会减小，在压缩事还会消耗cpu,mem资源
 4、nginx rewrite
 5、优雅显示
+'''
