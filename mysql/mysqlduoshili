@@ -27,4 +27,25 @@ http://edu.51cto.com/course/course_id-395.html
 2、用一个配置文件，多个[mysqld] ，这样方法不好，耦合性高
 
 1、多配置文件方法
-    
+  建立mysql多实例的条件
+    首先按照我们前面讲过的四种mysql的安装方法之一安装好数据库，如果是编译安装，则到make install之后截止
+1、安装mysql,编译安装到make install为止
+        曾经单实例安装的数据库文件和启动程序最好删除，否则容易冲突
+        mv /usr/local/mysql/data /mnt/data-mysql5.5-single
+2、创建mysql多实例的数据目录
+    采用不同端口作为二级目录，以区别不同的实例
+        mkdir -p /usr/local/mysql/data/{3306,3307}/data
+    拷贝各自的配置文件和启动程序文件到各端口目录下3306,3307下
+        cp ...  rz ..
+    给授权
+        chown -R mysql.mysql /usr/local/mysql/data/
+    给mysql启动程序 700执行权限
+        find /usr/local/mysql/data/ -type f -name 'mysql'|xargs chmod 700
+        which mysql 看一下mysql 全局路径
+    初始化数据库
+        mysql_install_db --basedir=/usr/local/mysql --datadir=/usr/local/mysql/data/3306/data --user=mysql
+    启动数据库
+        /usr/local/mysql/data/3306/mysql start
+    连接数据库
+        mysql -uroot -p -S /usr/local/mysql/data/3306/mysql.sock----本地连接
+        mysql -uroot -p -h'192....' -P 3307 -----远程连接不用指定sock,-P指定端口

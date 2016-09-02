@@ -1,0 +1,132 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
+非常重要 mysql主从同步！
+
+引子：普通文件的数据同步
+    普通的文件同步方法 rsync sersync innotify scp nfs samba svn
+1、nfs网络文件共享
+2、samba共享数据
+3、定时任务或守护进程结合rsync,scp
+4、inotify+rsync 触发式实时同步
+5、ftp数据同步
+6、ssh key +scp/rsync
+7、svn版本管理系统
+8、rsync sersync inotify union(双向同步) csync2(多向同步)
+mysql的主从同步和上述2,3点是类似的，只不过mysql无需借助第三方工具，而是其自带的同步复制功能，另外mysql的主从同步不是磁盘上的文件直接同步，而是sql语句方式从一个地方导入到另一个地方
+
+mysql 主从介绍
+    mysql 支持单向，双向，链式级联，实时，异步复制。在复制过程中，一台服务器充当主服务器（master)，而一个或多个充当从服务器（slave）
+    复制可以是单向 m==>s,也可以是m<==>m,也可以多m环状同步等
+    如果设置了链式级联复制，那么从（slave）服务器本身除了充当从服务器外，也会同时充当下面从服务器的主服务器
+        链式级联复制类似A-->B-->C-->D 的复制形式  画图很重要
+
+在生产工作中，mysql都是异步复制方式，即不是严格实时同步
+    实时
+    异步
+当配置好主从复制后，所有对数据库内容的更新就必须在主服务器上进行，以避免用户对主服务器上的数据库内容的更新 与从服务器上的数据库内容不一致而导致冲突
+
+第一种防止数据写入从库方法：
+    采取或略授权表方式，然后对从服务器上的用户仅授权select权限，不同步mysql库，这样可以保证主库和从库相同的用户可以授权不同的权限
+
+第二种防止从库写入：
+    除了上面select的授权外，还可以在slave服务器上启动选项增加参数或在my.cnf配置文件中加read-only参数确保从库只读，当然授权用户和read-only参数二者同时使用最好，生产中常用办法
+    read-only参数可以让slave服务器只允许来自slave服务器线程或具有super权限的用户的更新。可以确保slave服务器不接受来自普通用户的更新，slave服务器启动项增加--read-only也是同样功能
+
+用户 密码 端口 ip
+写库blog 123456 3306 10.0.0.7
+读库blog 123456 3306 10.0.0.8
+
+生产环境主库授权
+    grant select,delete,update,insert on bolg.* to 'blog'@'10.0.0.%' identified by '123456';
+提示：特殊业务可能权限会略多，如果业务安全性要求不高，也可以all privileges权限
+
+从库
+    grant select on blog.* to 'blog'@'10.0.0.%' identifier by '123456';
+提示：可以结合read-only参数共同做
+
+如何实现上述授权方案：
+    最简单的办法是在主库配置binlog-ignore-db=mysql-----待研究
+
+mysql主从同步应用场景
+    mysql主从复制有利于数据库架构的健壮性，提升访问速度，易于维护管理
+1、主从服务器互为备份
+    大大加强健壮性，当主服务器出问题时，可以人工或自动切换到从服务器继续提供服务
+2、主从服务器读写分离分担网站压力
+    www ,blog等常用
+3、根据服务器拆分业务独立分担压力
+    主从数据库写读分离，主服务器做心跳线，从服务器做负载均衡等等
+    从服务器拆分，供前台用，供dba用，供内部人员用，供备份用等等
+
+如何实现mysql读写分离
+1、通过程序实现读写分离（性能好，效率佳，推荐）
+    php和java程序都可以通过设置多个链接文件轻松实现对数据库的读写分离，即当select时，就去链接读库的链接文件，当update,insert,delete时就去链接写库的链接文件，
+2、通过软件实现
+    mysql-proxy,amoeba等代理软件也可以实现读写分离功能，但常用好用的还是程序实现读写分离
+
+mysql主从复制原理
+    mysql的主从复制是一个异步的复制过程（但一般情况感觉是实时同步的），数据库数据从一个mysql数据库（master）复制到另一个mysql数据库（slave）。在master与slave之间实现整个主从复制的过程是由三个线程参与完成的，其中两个线程（sql线程和io线程）在slave端，另一个IO线程在master端
+    要实现mysql主从复制，首先必须打开master端的binlog(MySQL-bin.xxxxx)功能，否则无法实现主从复制，因为整个复制过程实际上就是slave从master端获取binlog日志，然后再在slave自身上以相同顺序执行获取的binlog日志中锁记录的各种操作
+    图41
+    select语句不会记录到master端的binlog中
+同步时 slave先打开开关。slave带着权限访问master,读取msater的binlog,slave得到master的binlog后，在将sql语句按顺序执行一次，完成同步
+
+实践主从复制
+1、复制准备，定义服务器角色
+    主库（192.168.1.122 port 3306）
+    从库（192.168.1.122 port 3307）
+    从库（192.168.1.122 port 3308）
+提示：
+   1、 一般常规做主从复制，主服务器多数在不同机器上，并且监听端口均默认的3306
+    2、本例子虽然在同ip多实例上的讲解
+    3、步骤个和过程是一样的
+1、master设置server-id 并开启binlog功能
+    vim /usr/local/mysql/data/3306/my.cnf
+        log-bin = /usr/local/mysql/data/3306/mysql-bin 
+        server-id 都不要相同
+提示：1、server-id log-bin两个参数一定放在[mysqld]模块下
+        2、server-id使用服务器ip最后几位，避免id重复   0<server-id<2^32-1
+        3、参数不能重复，切记
+        4、修改完需要重启，确定log-bin确实打开了
+            mysql>show variables like 'log_bin';
+            mysql>show variables like 'server_id';
+                或者mysql -uroot -p'xianghong379' -S /usr/local/mysql/data/3306/mysql.sock -e 'show variables;'|egrep 'log_bin|server_id'
+2、建立用于同步的账号rep
+    登录master
+        mysql -uroot -p'xianghong379' -S /usr/local/mysql/data/3306/mysql.sock
+    授权
+        grant replication slave on *.* to reg@'192.168.1.%' identified by '123456';
+        flush privileges;
+        提示：replication slave为mysql同步的必须权限，此处不要授权all
+                *.*表示所有库所有表，也可以指定具体的库和表进行复制
+3、对数据库锁表只读（当前窗口不要关掉） 目的是先 slave得到备份起始点
+    生产环境，操作主从复制，需要申请停机时间，数据量很大锁表会影响业务，当然有一键完成主从方案等等,不停机也能搞
+        mysql>flush tables with read lock;
+    提示 这个锁表命令的时间，会在不同引擎情况下，受到下面参数的控制，锁表时，如果超过设置时间不操作会自动解锁
+        interactive_timeout = 60
+        wait_timeout = 60
+    默认情况下时长为：
+        mysql>show variables like '%timeout%';
+4、    查看binlog位置
+        show master status; 显示内容一定记录下来，后面要用到
+    锁表后新开窗口进行数据库全备份
+        mysqldump -uroot -pxianghong379 -B -A --events -S /usr/local/mysql/data/3306/mysql.sock > ~/new.sql     ----- -A表示全部备份
+    解锁
+        unlock table;
+    解锁之前binlog的位置不应发生变化，锁表一定在备份之前，解锁一定在备份之后
+5、数据量大的情况下，可以尝试停机，拷贝
+6、操作从库
+    从库如果只做从库，不做其他数据库的主库情况下，从库不要开log-bin,否则需要打开（或者从库需要做全备份时候用到log-bin时候需要打开）。
+    server-id和主库不能一样，调整完重启
+7、将备份的数据导入从库
+    mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock < new.sql
+    mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3308/mysql.sock < new.sql
+        master slave不在同一机器上，通过scp或rsync将备份的数据发送到slave,在导入
+8、登录从库配置同步参数
+    mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock
+    mysql>change master to
+    mysql>
+    mysql>
+    mysql>
+    mysql>
+    mysql>

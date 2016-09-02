@@ -1,0 +1,8 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
+经常查看各种服务运行日志是个很好的习惯，也是高手的习惯
+1、服务日志如：mysql错误日志一窥 如执行 tail -100 /usr/local/mysql/data/3306/mysql_oldboy3306.err 
+2、细看命令的屏幕输出，不要忽略关键的输出内容
+3、查看系统的/var/log/messages
+4、如果是关联服务，要同时查看相关服务的log
