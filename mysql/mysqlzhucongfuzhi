@@ -95,7 +95,7 @@ mysql主从复制原理
     登录master
         mysql -uroot -p'xianghong379' -S /usr/local/mysql/data/3306/mysql.sock
     授权
-        grant replication slave on *.* to reg@'192.168.1.%' identified by '123456';
+        grant replication slave on *.* to rep@'192.168.1.%' identified by '123456';
         flush privileges;
         提示：replication slave为mysql同步的必须权限，此处不要授权all
                 *.*表示所有库所有表，也可以指定具体的库和表进行复制
@@ -108,7 +108,14 @@ mysql主从复制原理
     默认情况下时长为：
         mysql>show variables like '%timeout%';
 4、    查看binlog位置
-        show master status; 显示内容一定记录下来，后面要用到
+        show master status; *显示内容一定记录下来，后面要用到*
+            mysql> show master status;
+                    +------------------+----------+--------------+------------------+
+                    | File             | Position | Binlog_Do_DB | Binlog_Ignore_DB |
+                    +------------------+----------+--------------+------------------+
+                    | mysql-bin.000007 |      107 |              |                  |
+                    +------------------+----------+--------------+------------------+
+                    1 row in set (0.00 sec)
     锁表后新开窗口进行数据库全备份
         mysqldump -uroot -pxianghong379 -B -A --events -S /usr/local/mysql/data/3306/mysql.sock > ~/new.sql     ----- -A表示全部备份
     解锁
@@ -125,8 +132,100 @@ mysql主从复制原理
 8、登录从库配置同步参数
     mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock
     mysql>change master to
-    mysql>
-    mysql>
-    mysql>
-    mysql>
-    mysql>
+        ->master_host='192.168.1.122',    ------主库ip
+        ->master_port=3306,    -----------------主库端口，从库端口可以和主库不同
+        ->master_user='rep',     ---------------------这里是主库上建立的用于复制的用户rep
+        ->master_password='123456',   --------------这里是rep账户的密码
+        ->master_log_file='mysql-bin.000007',   ----------这里是show master status;时看到的二进制文件日志名称，注意不能多空格
+        ->master_log_pos=107;  -----这里是show master status 时看到的二进制日志偏移量，不能多空格
+    
+    不登录数据库，在命令行快速执行 change master的语句（适合在脚本中批量建立slave库用）
+        cat|mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock<< EOF
+        change master to
+        master_host='192.168.1.122',
+        master_port=3306,
+        master_user='rep',
+        master_password='123456',
+        master_log_file='mysql-bin.000007',
+        master_log_pos=107;
+        EOF
+上述操作原理 实际是把用户密码端口ip等信息写入到master.info
+    [root@6.4-122 ~]#cat /usr/local/mysql/data/3307/data/master.info 
+    18
+    mysql-bin.000007
+    107
+    192.168.1.122
+    reg
+    123456
+    3306
+    60
+    0
+    
+    
+    
+    
+    
+    0
+    1800.000
+    
+    0
+    [root@6.4-122 3307]#
+
+9、执行同步开关，从数据库操作
+    mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock
+    mysql>slave start;
+    查看同步信息
+    mysql>show slave status\G
+确定是否同步的三个关键信息
+                 Slave_IO_Running: Yes   线程需开启
+                Slave_SQL_Running: Yes  线程需开启
+                Seconds_Behind_Master: 0 与master延迟，为0即同步，几百秒的话，同步就不行了，单位秒
+    
+总结主从步骤：
+mysql主从同步配置：
+1、两台以上数据库，或者单台多实例，正常启动和登录
+2、配置my.cnf，主库配置log-bin和server-id，从库配置server-id，server-id唯一不能重复，从库一般不开启log-bin功能，重启并确认生效
+3、登录主库增加用于从库链接主库的同步的账号，如 rep,并授权rep具有replication slave的权限
+4、登录主库，整库锁表flush tables with read lock;然后show master status 查看binlog位置信息并记录
+5、新开窗口，使用mysqldump备份或导出原有的数据库数据，并拷贝到从库所在服务器,如果数据量很大，并且允许停机，可以停机打包，而不用mysqldump
+6、解锁主库unlock tables;
+7、把主库备份的原有基础数据恢复到从库
+8、从库执行change master to语句并录入从库链接主库的个想参数，确认master.info文件正确生成
+9、从库开启同步开关slave start;
+10、从库show slave status\G,确认从库开启同步开关成功，并在主库更新数据测试
+
+expire_logs_days = 7  my.cnf中控制binlog 保留几天的参数
+mysqlbinlog 命令可以读binlog
+
+生产环境主从库配置的注意事项
+1、申请设备资源，用来做从库服务器
+2、方案文档和试试步骤（测试环境测试好，写好文档）
+假如你的服务器只有主库，而且已经跑了线上应用了，现在由于业务需要，第一次做从库，此时可能需要申请停机时间（时间够做一次完备的），在用户访问量最小的时候停机（一般是凌晨）
+注意：停机的最小时间段（锁表，停库）为锁表备份后的时间，也就是无需等待主从配置好
+    当然，也可以不申请停机时间，利用平时定时任务定时备份的数据库文件，来完成不停主库来配置主从
+
+无需熬夜，配置主从
+思路是 通过修改定时备份mysql的脚本获得一次全备份mysql 及锁表前后的show master status;的值，然后有了这两个信息就能配置注从了，脚本注意不要在备份同时刷新binlog
+
+配置忽略权限库的同步参数
+为什么配置忽略权限库：
+    因为我们希望主库从库用户名密码是一致的，同步后就授权就一致了，所以要忽略权限库
+
+操作方法：
+法一、 master端忽略mysql库和information_schema库的主从同步，让master不写关于mysql和information_schema的更改binlog
+    vim /usr/local/mysql/data/3306/my.cnf
+    设置
+    binlog-ignore-db=mysql 参数
+此方法不适合5.5及以上
+
+法二、slave端my.cnf加入
+    replicate-wild-ignore-table=mysql.%      ---有效  
+    replication-ignore-db=mysql        ---有其他问题跨表问题等，不能用
+这两种也是不同步部分表和库的方法
+
+mysql主从复制故障解决
+模拟错误：模拟重现故障的能力是运维人员最重要的能力
+
+
+
+
