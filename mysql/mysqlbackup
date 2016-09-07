@@ -140,4 +140,112 @@ mysql命令恢复 最标准的,如果备份时使用—B参数，恢复时无需
 mysql sleep 过多的问题
     谷歌 百度
 
+备份实战：
+非常重要，非常重要
 
+全量备份与增量备份
+    全量数据就是数据库中的所有数据，全量备份就是把数据库中所有的数据备份。
+    mysqldump -uroot -pxianghong379 -S /usr/local/mysql/data/3306/mysql.sock -B -A|gzip > ~/mysqlbak_$(date +%F).sql.gz  这就是全备，但应该加入-F参数，刷新binlog,不加-F参数并不能找到哪些binlog是新增的
+    mysqldump -uroot -pxianghong379 -S /usr/local/mysql/data/3306/mysql.sock -F -B -A|gzip > ~/mysqlbak_$(date +%F).sql.gz
+    增量数据是从上次全量备份之后更新的新数据.对于mysql来说，binlog日志就是mysql的增量数据
+
+    全量和增量的频率：
+1、中小公司，全量一般是每天一次，夜里流量低谷执行
+2、单台数据库，如何增量，rsync（配合定时任务频率大一点或者inotify两种方式都不好，最好的办法使用主从同步做备份）增量的把所有的binlog推到备份服务器
+3、大公司每周备，每周一次全量（比如每周六00点），下周日到下周六00点前都是增量，优点：节省备份时间，减小备份压力  缺点：备份副本太多，还原很麻烦
+4、一主五从，会有一个做备份的从，延迟同步，从库更新永远比主库晚3个小时，如果误操作了主库，从库没有及时更新，保证数据的有效
+
+mysql备份的常用方法
+    mysql常用备份方法有逻辑备份和物理备份（oracle也如此）
+逻辑备份
+    逻辑备份其实就是mysqldump 把mysql数据备份成sql语句存储，在恢复时候通过执行mysql恢复命令mysql即可将存储的sql语句还原到数据库中.
+    增量备份，备份binlog即可，如何恢复呢？mysqlbinlog工具可以把binlog日志转换成sql语句，然后通过mysql来导入恢复
+    常用工具为mysql自带的mysqldump
+物理备份
+    mysql物理备份方法之一是使用cp,rsync,tar,scp等复制工具把mysql文件复制成多份，由于在备份期间数据仍然在写入数据库，所有直接复制的方式备份会引起数据丢失，另外在恢复数据时，对新数据库的路径，配置也有要求，一般要和原库的配置保持一致
+    为了确保备份期间数据一致性，可以选择人工停库或者锁库后在进行物理复制，生产中一般不被允许
+    除了在linux命令行直接复制数据文件外，还有一些其他第三方的开源或商业备份工具 如 xtrabackup
+    一般在进行大规模迁移数据库时，停库然后物理迁移，是最有效率的方案
+
+如何选择mysql备份方式:
+    逻辑备份 物理备份
+备份原理 导出mysql语句存储 直接复制磁盘物理文件
+备份命令 mysqldump,mysql cp,rsync,tar,scp,xtrabackup
+备份要求 需要锁表但不需要停机 需要锁表或停机
+特点1配置 恢复时系统、mysql配置，甚至都与版本无关，速度快 需要系统、配置，版本一致
+特点2性能 速度较慢 速度较快
+特点3方便 容易掌握，一般不会丢失数据 较难掌握，容易丢失数据
+
+mysqldump工具
+    mysqldump是目前大众最长使用的备份工具，支持基于innodb的热备份，由于是逻辑备份，速度不是很快100G以内的数据，使用mysqldump足以应付
+    mysqldump -F -B -A
+    --compact   测试时用的比较多，也可以优化输出内容，让容量更小
+    --default-character-set=name 可设置导出的客户端字符集，按照原有字符集导出，中文不会乱码     建议--lock-all-tables(-x) -F 同时使用，否则，同时会出现多个库刷新binlog文件
+    -d 只导出表结构，不倒数据
+    -大P 端口
+    -u
+    -p
+    -h
+    --single-transaction  innodb表在备份时候需要开启此选项，来保证备份的一致性，原理是为本次dump操作设定会话隔离级别为 repeatable read,确保本次会话dump事，不会看到其他会话提交的数据更新
+
+生产环境单机mysql的完全备份
+    myisam
+    由于myisam引擎为表级锁，备份时需要防止在备份期间数据写入而导致不一致，所以备份时使用--lock-all-tables加上读锁
+    mysqldump -A -F -B --lock-all-tables|gzip > ~/bak_$(data +%F).sql.gz
+    
+    innodb
+    innodb引擎为行锁，因此，备份时可以不对数据库加锁的操作，可以加选项--single-transaction备份
+    mysqldump -A -F -B --single-transaction|gzip >~/bak_$(date +%F).sql.gz
+--single-transaction仅适合innodb。不适合myisam
+
+逻辑备份中的增量备份（配合mysqldump的）（二进制日志备份）
+    增量备份的实质就是备份二进制日志
+    二进制日志包括但不限于insert,delete,update,alter,create等，特别强调，一定不包含select等查询命令的内容
+    二进制日志功能需要在 my.cnf [mysqld]中log-bin=filename  中开启
+mysqlbinlog mysqm-bin.000035  查看二进制日志内容
+
+备份二进制日志
+法一：
+    最简单的办法就是写个定时任务或守护进程，每5分钟或者每分钟或者inotify触发同步来把日志备份到其他磁盘或者服务器上，当然最好的还是主从，从上面开启binlog,在备份
+列如   rsync -avzP /data/3306/mysql-bin.* rsync_back@192.168.1.121::mysqlbak/binlog/ --password-file=/etc/rsync.password
+
+法二：
+    可以使用mysqladmin的日志切割参数，对binlog按时间切割， 如每15分钟一份，这样在出故障时，容易定位日志位置点，但这不是必须的
+    mysqladmin -uroot -pxianghong379 -S /data/3306/mysql.sock flush-logs
+
+删除二进制日志
+1、resetmaster;
+    删除所有binlog日志，新日志从头开始
+2、。。。
+3、最好的就是my.cnf 设置 expire_logs_days=7
+
+完全备份+增量备份=完整备份
+
+xtrabackup 物理备份
+
+核心
+*分库分表生产备份策略
+    为什么要分库分表备份
+        全备 整个备份在一个文件里面，不好拆分，耦合度太高，不灵活
+    如何进行分库备份
+        写脚本，分别备份
+
+生产常用备份架构方案
+    全备每日00点执行，先把数据按照日期备份到本地，然后推送到备份服务器，由于本地空间有限，本地仅保留3-7日的全备
+    如果是多个服务器，最好通过主从同步的方式进行备份，这样物理机损坏可以很快的切到生产使用（还可以HA自动切换），但是主从同步缺点是不能解决误删及错误执行的sql语句问题，如 drop table test后，从库也会删除，因此我们一般使用mysqldump定时备份，在配合从库延时同步，图45
+
+恢复
+    生产中一般常用一主多从的数据库架构，常见的备份方案在某一个不对外的从库上开启binlog,然后实施定时全备和增量备份
+什么情况下需要数据库增量恢复呢？
+1、主或从宕机（硬件损坏）是否需要增量恢复？
+    不需要，只需要把其中一个同步最快的从库切换为主库即可
+2、人为操作破坏主库是否需要增量恢复？
+    导致数据丢失，从库也可能数据丢失，需要增量恢复
+3、只有一个主库是否需要增量恢复？
+    如果只有一个主库，要定时全备（每天一次）和增量备份（每隔1-10分钟对binlog日志切割然后备份到其他服务器上，或者本地磁盘）
+    如果不能丢失数据，最好的办法就是主从，drbd同步
+正常情况下
+    主从同步：除了分担读写分离压力，还可以防止物理设备损坏，数据丢失
+    从库备份：在从库进行全量和增量方式备份，可以防止人为对主库的误操作导致数据丢失
+一般人为进入数据库内的执行的sql误操作语句，需要增量恢复，因为此时，所有的从库也执行了此我操作语句
+图46

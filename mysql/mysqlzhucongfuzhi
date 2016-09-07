@@ -225,7 +225,66 @@ mysqlbinlog 命令可以读binlog
 
 mysql主从复制故障解决
 模拟错误：模拟重现故障的能力是运维人员最重要的能力
+    当从库写入数据了，只要不在和主库同步的库和表里面写数据就没事
+    相反数据有冲突了，就会报错
+        解决方法：一般常规方法，忽略一些同步指针,有可能导致数据不一致
+            mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock -e "stop slave;"
+            mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock -e "set global sql_slave_skip_counter=1;"
+            mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3307/mysql.sock -e "start slave;"
 
+提示：对于普通业务，忽略问题不是很大，可以操作
+        如果数据一致比主从一致更重要，可以找个时间恢复一下这个从库
+        需要更具业务选择
+set global sql_slave_skip_counter=n; n>0可以忽略若干个语句
+根据mysql 错误号判断错误，还可以跳过错误
 
+vim slave端的 my.cnf
+skip-skip-errors = 1032,1062,1007   
+一般由于入库重复导致的失败可以忽略
 
+其他引起不同步的原因
+1、mysql 自身原因
+2、不同的数据库版本会引起不同步，低版本到高版本可以，但高版本不能到低版本同步
+3、mysql的错误
+
+还有一个比较有用的命令
+master端
+    show processlist\G
+slave端
+    show processlist\G  查看同步线程状态
+
+一主五从 数据库 主库宕机了，如何提升从库为主库，需要看show processlist;挑选一个好的从库
+
+配置slave记录binlog
+slave需要记录binlog的情况
+    1、当前slave还要作为其他slave的master
+    2、把slave作为备份服务器时
+在从库的my.cnf中加入如下参数
+    log-slave-updates
+    log-bin=mysql3307-bin
+    expire_logs_days = 7    <==>find /usrlocal/mysql/data/3307/ -type f -name 'mysql3307-bin.000*' -mtime +7|xargs rm -f
+
+有了主从同步，但还必须做增量+全量备份
+raid方式做数据库数据盘，人人网 raid10 单库，每3小时备份一次binlog文件
+
+严格设置从库只读
+1、read-only 生产环境中在slave中加入read-only参数
+    slave
+    vim my.cnf
+    添加read-only
+提示read-only参数对具有all权限的用户是不起作用的，
+2、授权时候忽略授权表，做到master的用户不会在slave上出现
+
+mysql 主主同步关键参数
+
+auto_increment_increment=2
+auto_increment_offset=1
+==================
+master1
+auto_increment_increment = 2 自增id的间隔
+auto_increment_offset = 1 id的初始值
+
+master2
+auto_increment-increment = 2
+auto_increment_offset = 2
 

@@ -1,0 +1,155 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+'''
+mysql可以同时使用多种存储引擎，每种存储引擎和mysql之间通过插件结构联系
+
+MyISAM
+mysql5.5之前的默认存储引擎
+    MyISAM: The MySQL storage engine that is used the most in Web, data warehousing, and other application environments. MyISAM is supported in all MySQL configurations, and is the default storage engine prior to MySQL 5.5.5.
+
+innodb由于对事物的参照的完整性以及更高的并发 正在逐步取代myisam引擎
+查看mysql支持的引擎及默认引擎
+show engines\G
+select version(); 查看数据库版本
+
+mysql> show create table myisam;
++--------+-------------------------------------------------------------------------------------+
+| Table  | Create Table                                                                        |
++--------+-------------------------------------------------------------------------------------+
+| myisam | CREATE TABLE `myisam` (
+  `id` int(4) NOT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=utf8 |
++--------+-------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+mysql> 
+
+每一个myisam表都对应于硬盘上的三个文件，这三个文件有一样的文件名，当时不同的扩展名用来只是类型用途：.frm文件保存表定义，但是这个文件并不是myisam引擎的一部分，而是服务器的一部分；.MYD保存表数据（data）；.MYI是表的索引文件(index)
+
+MyISAM引擎重要特点：
+1、*不支持事务
+    事务：指逻辑上的一组操作，组成这组操作的各个单元，要全部成功，要么就全部失败
+        例如A-B转账
+2、*表级别锁定（更新时锁整个表）：其锁表机制是表级别索引，这虽然可以让锁定的实现成本很小但是也同时大大降低了并发性能
+3、读写互相阻塞：不仅会在写入的时候阻塞读取，MyISAM引擎还会在读取的时候阻塞写入，但读取本身并不会阻塞另外的读
+4、只会缓存索引：MyISAM可以通过key_buffer缓存大大提高访问性能，减少磁盘IO,但是这个缓存区只会缓存索引，而不会缓存数据
+    grep key_buffer_size /etc/my.cnf
+5、读取速度较快，占用资源相对少
+6、不支持外键约束，但支持全文索引
+7、MyISAM是mysql5.5.5版本之前默认的存储引擎
+
+MyISAM应用场景
+1、不需要事务支持的业务（转账付款业务必须要事务），一般读数据比较多的网站应用
+2、并发相对较低的业务（锁定机制问题）
+3、数据修改相对较少的业务（阻塞问题）
+4、以读为主的业务，列如 www log 图片的数据库业务
+5、对数据一致性要求不是很高的业务
+6、中小型的网站部分业务会用
+
+MyISAM 调优精要
+1、尽量索引（缓存机制）
+2、调整读写优先级，根据实际需求确保重要操作更优先
+3、启用延迟插入改善大批量写入性能（降低写入频率，尽可能的让多条数据一次性写入）
+4、尽量顺序操作让insert数据都写入到尾部，减少阻塞
+5、分解大的操作，降低单个操作的阻塞时间
+6、降低并发数，某些高并发场景通过应用进行排队机制
+7、对于相对静态的数据，充分利用Query Cache(mysql自身缓存功能)或mamcached可以极大的提高访问效率
+    grep query /etc/my.cnf
+8、MySIAM的count()函数只有在全表扫描的时候特别高效，带有其他条件的count都需要进行实际的数据访问
+9、把主从主库用innodb,同步的读库使用myisam
+
+InnoDB引擎
+    InnoDB引擎正成为mysql的默认引擎，包含在二进制安装包里。比其他引擎优点在于支持兼容ACID事务（类似于PostgreSQL），以及参数完整性（即对外键的支持）
+    每一个innodb数据库里面的表 没有了.MYD和.MYI文件，只有属于服务器部分的.frm表定义文件，表数据文件放在了data目录下ibdata1文件中，数据文件名定义是在my.cnf中
+    [root@6.4-122 data]#grep innodb_data_file /etc/my.cnf 
+    #innodb_data_file_path = ibdata1:10M:autoextend  数据文件名称:以10M为单位:自动扩展
+    [root@6.4-122 data]#
+
+InnoDB特点
+1、*支持事务；支持4个事务隔离级别，支持多版本读
+2、*行级别锁定（*更新时一般是锁定当前行）：通过索引实现，全表扫描仍然会是锁表，注意间隙锁的影响
+3、读写阻塞与事务隔离级别有关
+4、具有非常高效的缓存特性：能缓存索引，也能缓存数据
+5、整个表和主键以Cluster方式存储，组成一颗平衡树
+6、所有Secondary index 都会保存主键信息
+7、*支持分区，表空间等，类似oracle数据库
+8、*支持外键约束，不支持全文索引
+9、相比MyISAM引擎，InnoDB更消耗资源，速度没有Myisam快
+InnoDB引擎适用生产业务场景
+1、需要事务支持（具有较好的事务特性）
+2、行级别锁定对高并发有很好的适应能力，但需要确保查询是通过索引完成的
+3、数据更新较为频繁的场景，如 BBS,SNS,微博等
+4、数据一致性要求较高的业务 例如 充值转账
+5、硬件设备内存较大，可以利用InnoDB较好的缓存能力来提高内存利用率，尽可能减少磁盘IO
+    grep -i /ect/my.cnf
+
+InnoDB调优精要
+1、主键尽可能小，避免给secondary index 带来过大的空间负担
+2、避免全表扫描，因为会使用表锁
+3、尽可能缓存所有的索引和数据，提高响应速度，减少磁盘Io
+4、在大批量小数据插入的时候，尽量自己控制事务而不要使用aotucommit自动提交（有开关可以控制提交方式）
+5、合理设置innodb_flush_log_at_trx_commit （把log往磁盘刷新的级别，保持数据安全参数）参数值，不要过度追求安全性
+6、避免主键更新，因为会带来大量数据移动
+
+myisam和innodb简单特性
+myisam                                      innodb
+1、读取速度快                       1、读取速度一般
+2、*更新时锁整个表                  2、*更新时一般锁定当前行  
+3、占用资源少                       3、占用资源较多
+4、适合读多写少的业务，如www        4、适合读和写多的业务，如bbs,微博等
+5、*不支持事务                      5、*支持事务，分区，表空间等
+6、不支持外键约束，但支持全文索引   6、支持外键约束，不支持全文索引
+7、myisam是mysql5.5.5前默认存储引擎 7、innodb是mysql5.5.5后默认存储引擎
+
+Table 15.1 Storage Engines Feature Summary
+
+Feature MyISAM  Memory  InnoDB  Archive NDB
+Storage limits  256TB   RAM 64TB    None    384EB
+Transactions    No  No  Yes No  Yes
+Locking granularity Table   Table   Row Row Row
+MVCC    No  No  Yes No  No
+Geospatial data type support    Yes No  Yes Yes Yes
+Geospatial indexing support Yes No  Yes[a]  No  No
+B-tree indexes  Yes Yes Yes No  No
+T-tree indexes  No  No  No  No  Yes
+Hash indexes    No  Yes No[b]   No  Yes
+Full-text search indexes    Yes No  Yes[c]  No  No
+Clustered indexes   No  No  Yes No  No
+Data caches No  N/A Yes No  Yes
+Index caches    Yes N/A Yes No  Yes
+Compressed data Yes[d]  No  Yes[e]  Yes No
+Encrypted data[f]   Yes Yes Yes Yes Yes
+Cluster database support    No  No  No  No  Yes
+Replication support[g]  Yes Yes Yes Yes Yes
+Foreign key support No  No  Yes No  No
+Backup / point-in-time recovery[h]  Yes Yes Yes Yes Yes
+Query cache support Yes Yes Yes Yes Yes
+Update statistics for data dictionary   Yes Yes Yes Yes Yes
+[a] InnoDB support for geospatial indexing is available in MySQL 5.7.5 and higher.
+[b] InnoDB utilizes hash indexes internally for its Adaptive Hash Index feature.
+[c] InnoDB support for FULLTEXT indexes is available in MySQL 5.6.4 and higher.
+[d] Compressed MyISAM tables are supported only when using the compressed row format. Tables using the compressed row format with MyISAM are read only.
+[e] Compressed InnoDB tables require the InnoDB Barracuda file format.
+[f] Implemented in the server (via encryption functions). Data-at-rest tablespace encryption is available in MySQL 5.7 and higher.
+[g] Implemented in the server, rather than in the storage engine.
+[h] Implemented in the server, rather than in the storage engine.
+
+生产环境如何更改引擎，批量更改
+法一：
+    alter table TB_NAME engine=innodb;
+    alter table TB_name engine=myisam;
+    show create table student\G
+法二：
+    使用sed对mysqldump备份的数据进行替换
+    mysqldump > 111.sql
+    nohup sed -e 's/MyISAM/InnoDB/g' 111.sql > 111_gai.sql
+法三：
+    mysql_convert_table_format 命令行命令修改
+    mysql_convert_table_format --help  谷歌
+
+mysql 企业常见面试题
+1、mysql有哪些存储引擎，各自区别是什么
+2、生产环境如何选用引擎
+
+在一般的既有读又有写的业务中，建议使用innodb，一句话尽可能多的使用innodb
+
