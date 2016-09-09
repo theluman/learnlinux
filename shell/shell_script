@@ -25,4 +25,29 @@ echo $SHELL
 2.path/script-name 或./script-name  需要有执行权限
 3.source script-name 或. script-name source或.号可以将脚本san.sh自身中的变量的值或函数等的返回值传递到当前父shell father.sh脚本中使用，及在当前shell中执行，而不是产生一个子shell执行
 
+提示方法三在写脚本时会有用到，观察其他系统脚本也会看到，目的就是将新设定的变量被当前脚本识别，sh执行的话，变量就传给了子shell，当前脚本无法识别
 
+shell脚本开发基本规范
+1、开头指定脚本解释器
+    #!/bin/bash 或#!/bin/sh
+    #编码方式
+2、开头加时间、版本，作者，用途等信息
+    #Date           16:29 2012-3-30
+    #Author         Dean
+    #Mail           435904632@qq.com
+    #Function       .......
+    #Description    .....
+    #Version    1.1
+提示，可配置vim编辑文件时自动加上以上信息，方法是修改~/.vimrc配置文件
+3、脚本中不能用中文注释
+4、脚本以.sh为扩展名
+5、保持优秀习惯
+    a.成对内容一次写出来，防止遗漏
+        {} [] "" ''
+    b.[]中括号两端要有空格，书写时即留出空格，然后退格书写内容
+        [  ]
+    c.流程控制语句一次书写完，在添加内容
+        if pass;then
+            pass
+        fi
+    d.良好的缩进是代码美观易读
