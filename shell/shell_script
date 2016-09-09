@@ -1,0 +1,28 @@
+硬件-->系统核心-->命令解释器shell-->外围应用程序
+
+有的公司通过修改默认bash，加入记录键盘操作的功能来实现日志审计
+
+清空系统日志的三种方法
+echo "" > test.log
+> test.log
+cat /dev/null > test.log
+
+默认shell查看
+echo $SHELL
+学习方法 多看系统脚本
+
+幻数必须在第一行，不在第一行就是注释
+#!/bin/bash 推荐写法
+#!/bin/sh
+
+#!/bin/awk
+#!/bin/sed
+#!/usr/bin/tcl
+#!/usr/bin/expect
+
+脚本执行方式
+1.bash script-name或sh script-name  推荐使用，无需执行权限
+2.path/script-name 或./script-name  需要有执行权限
+3.source script-name 或. script-name source或.号可以将脚本san.sh自身中的变量的值或函数等的返回值传递到当前父shell father.sh脚本中使用，及在当前shell中执行，而不是产生一个子shell执行
+
+

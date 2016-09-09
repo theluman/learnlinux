@@ -1,0 +1,5 @@
+前提
+1、linux系统命令
+2、vim
+3、基础的服务
+    系统服务ntp,crond 网络服务nfs,rsync,inotify,sersync,ssh,lanmy,数据库mysql

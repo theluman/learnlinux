@@ -249,3 +249,93 @@ xtrabackup 物理备份
     从库备份：在从库进行全量和增量方式备份，可以防止人为对主库的误操作导致数据丢失
 一般人为进入数据库内的执行的sql误操作语句，需要增量恢复，因为此时，所有的从库也执行了此我操作语句
 图46
+
+对于恢复顺序，先恢复全备，在恢复增量备份，恢复增量时候要查看binlog日志，把错误执行的语句踢出去
+找原因，弥补，恢复
+日志审计
+
+模拟恢复
+建立数据库dongweichao
+建表students
+    use dongweichao
+    create table student(Sno int(10) not null comment'学号' primary key auto_increment,Sname varchar(16) not null comment'姓名',Ssex char(2) not null comment'性别',Sage tinyint(2) not null default 0 comment '年龄',Sdept varchar(40) default null comment '系别');
+表中插入数据
+    insert into student values (0001,'陆亚','男',24,'计算机网络'),(0002,'elain','男',26,'computer application'),(0003,'xiaozhang','男',28,'物流管理'),(0004,'jeacen','女',20,'computer application'),(0005,'张阳','男',29,'计算机科学技术');
+
+mysql> select * from student;
++-----+-----------+------+------+-----------------------+
+| Sno | Sname     | Ssex | Sage | Sdept                 |
++-----+-----------+------+------+-----------------------+
+|   1 | 陆亚      | 男   |   24 | 计算机网络            |
+|   2 | elain     | 男   |   26 | computer application  |
+|   3 | xiaozhang | 男   |   28 | 物流管理              |
+|   4 | jeacen    | 女   |   20 | computer application  |
+|   5 | 张阳      | 男   |   29 | 计算机科学技术        |
++-----+-----------+------+------+-----------------------+
+5 rows in set (0.00 sec)
+
+mysql> 
+
+假设0点进行备份，执行了备份脚本
+mysqldump -uroot -pxianghong379  -S /usr/local/mysql/data/3306/mysql.sock -F -B -A --single-transaction --events > 111.sql
+查看binlog刷新情况，确定增量binlog从哪个开始
+数据持续更新中
+ mysql> insert into student values (0015,'wdrf','女',29,'asdasd');
+Query OK, 1 row affected (0.01 sec)
+
+mysql> insert into student values (0016,'wdrf','男',32,'asdasd');
+Query OK, 1 row affected (0.00 sec)
+生产环境中，插入数据量不确定
+
+增量备份
+一定时间间隔后增量复制了binlog作为增量备份
+模拟破坏数据
+drop database dongweichao;
+
+查找原因，谁做了什么等等，日志等等，网站报错等等
+提示：数据库的权限管理尤为重要，不要随便给人权限
+
+***增量恢复***
+检查全备和增量二进制日志是否存在
+发现问题时刻第一时间立即刷新binlog切断出问题之前和之后的日志，最小化查找问题
+    mysqladmin -uroot -pxianghong379  -S /usr/local/mysql/data/3306/mysql.sock flush-logs
+   找到包含错错误操作的日志后cp出来
+将增量备份到的binlog与包含错误操作的log何在一起生成sql语句
+mysqlbinlog mysql-bin.000037 mysql-bin.000038 > bin.sql
+    生产环境中可能日志中的语句报告好多数据库的操作，所以-d dongweichao 选项设置值从binlog中转出与出问题的库dongweichao有关的语句
+    mysqlbinlog -d dongweichao mysql-bin.000037 mysql-bin.000038 > bin.sql
+如果binlog有多个
+mysqlbinlog -d dongweichao mysql-bin.00003{7..8} > bin.sql
+egrep -v '#|^$|^\/|*' bin.sql
+剔除其中有错操作的语句
+全量与增量sql语句文件准备好后，进行恢复
+    先恢复到00点的全备
+    mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3306/mysql.sock < 111.sql
+    在恢复增量数据指定库（看语句而定）
+    mysql -uroot -pxianghong379 -S /usr/local/mysql/data/3306/mysql.sock dongweichao < bin.sql
+
+mysqlbinlog恢复指定库的语句 -d dongweichao,生产中很关键的一点，因为生产中一个binlog里面可能有很多库的操作语句
+
+mysqlbinlog增量的恢复方式 多方式
+1、基于时间点的恢复
+    指定开始时间和结束时间
+    mysqlbinlog mysql-bin.000021 --start-datetime='2016-09-07 02:58:54' --stop-datetime='2016-09-07 05:56:20' -r time.sql
+    从二进制文件中活动开始结束时间内时间段的语句 并-r输出到time.sql
+
+    指定开始时间到文件结束
+    mysqlbinlog mysql-bin.000021 --start-datetime='2016-09-07 02:58:54' -d dongweichao -r time.sql
+    
+    从开头到指定的结束时间
+    同理
+    
+基于时间点的恢复，不能用于特别精确的恢复，因为一个时间点可能就有多条语句
+    
+2、基于位置点的恢复,binlog日志中有at 356 这种行，就是位置行
+    指定开始和结束位置
+    mysqlbinlog mysql-bin.000037 --start-position=510 --stop-position=1312 -r pos.sql
+注意：结尾的日志点比较特殊，不会被包含，即恢复1312这句之前的日志，日志点信息要存在，不能乱指定
+
+    其他同上面时间的用法
+基于位置点的恢复比较精确
+
+该看40-18视频了，先停在这

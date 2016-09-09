@@ -1,0 +1,46 @@
+()加括号的代表使用频率低的命令,命令按功能分类，空行分割
+
+man
+(info)
+
+ls tree pwd cd mkdir
+(rmdir)
+
+touch cp mv rm ln find rename
+
+cat less grep head tail cut sort uniq wc dos2unix find diff egrep wc tree paste file
+(chattr more rev tac iconv dd lasttr rename vimdiff)
+
+tar unzip gzip
+(bzip2 gunzip)
+
+uname hostname dmesg upyime du df top free w date
+(stat cal apropos)
+
+which find
+(whereis locate whatis)
+
+useradd userdel passwd chage usermod id su sudo visudo
+(pwcov pwck pwunconv chfn chsh finger sudoedit adduser)
+
+groupadd
+(groupdel groupmod gpasswd groups newgrp grpck grpconv grpunconv)
+
+telnet ssh scp wget curl ping route ifconfig ifup ifdown netstat tranceroute mail mutt nslookup dig
+(rlogin rcp finger ip ftp)
+
+mount umount df du
+(fsck dd dump)
+
+halt shutdown reboot ps top kill date
+(cal login)
+
+ps kill killall pkill jobs fg bg & nohup
+
+top  free vmstat mpstat iostat asr quota at lp kill crontab chkconfig last
+
+passwd su sudo umask chgrp chmod chown lsattr ps who whoami w
+
+w who users last lastlog fingers
+
+ethtool mii-tool dmidecode dmesg lspci -v
