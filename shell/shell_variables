@@ -1,0 +1,93 @@
+查看shell内部变量
+set
+env
+man bash
+man bash > bash.txt  下载下来查看,在grep "Shell Variables"搜索
+内置变量
+RANDOM   产生随机数的变量
+UID
+USER
+HISTSIZE
+HISTFILESIZE
+HOME
+HOSTFILE
+LANG
+PATH
+SHELL
+TMOUT
+
+内部命令
+有些系统命令在目录列表时是看不见的，有shell本身提供，常用的内部命令：echo,eval,exec,export,readonly,read,shift,wait,exit和点(.)
+man bash 在搜索SHELL BUILTIN COMMANDS
+
+多数内置命令无法用which查找，help command
+echo
+    echo -e
+read
+    read -p "please input: " var
+history
+    history -c
+printf 打印格式化的字符串
+    案列/data/3306/mysql
+ulimit 查看文件描述符,是优化系统的一项
+    ulimit -a
+    ulimit -n
+export
+shift 
+    shift语句按如下方式重命名所有的位置参数变量，即$2成为$1,$3成为$2...，程序中每使用一次shift语句，都使所有的位置参数依次向左移动一个位置，并使位置参数$#减1，直到减到0为止，位置参数降级
+time 计算时间 计算命令执行时间
+    time du -sh /etc
+eval args读入args参数，并将它们组合成一个新的命令，然后执行
+exec
+    当shell执行到exec语句时，不会去创建新的子进程，而是转去执行指定的命令，当指定的命令执行完毕时，该进程(也就是最初的shell)就终止了，所有shell程序中exec后面的语句将不再会执行，while循环常用
+
+变量字串的常用操作
+ +----+-------------------------------+------------------------------------------------------------+
+ |  1 | ${#string}                    | 返回$string的长度                                          |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  2 | ${string:position}            | 在$string中，从位置$position之后开始提取子串               |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  3 | ${string:position:length}     | 在$string中，从位置$position之后开始提取长度为$length子串  |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  4 | ${string#substring}           | 从$string开头开始删除最短匹配$substring子串                |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  5 | ${string##substring}          | 从$string开头开始删除最长匹配$substring子串                |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  6 | ${string%substring}           | 从$string结尾开始删除最短匹配$substring子串                |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  7 | ${string%%substring}          | 从$string结尾开始删除最长匹配$substring子串                +
+ +----+-------------------------------+------------------------------------------------------------+
+ |  8 | ${string/substring/replace}   | 使用$replace来代替第一个匹配到的$substring                 |
+ +----+-------------------------------+------------------------------------------------------------+
+ |  9 | ${string/#substring/replace}  | 如果$string前缀匹配$substring，就用$replace来代替$substring|
+ |    |                               +------------------------------------------------------------+
+ |  10| ${string/%substring/replace}  | 如果$string后缀匹配$substring,就用$replace来代替$substring |
+ +----+-------------------------------+------------------------------------------------------------+
+
+ 变量子串生产实例
+ 1、批量改名
+    touch 1_1finish.jpg 2_2finish.jpg 3_3finish.jpg
+    for file in $(ls *.jpg);do mv $file ${file%finish*}.jpg;done
+2、文件扩展名大小写转换
+    touch {a..g}.HTML
+    for file in $(ls *.HTML);do mv $file ${file/%HTML/html};done
+更深入的变量替换
+    ${$string:-word}
+        如果变量名存在且非null，则返回变量的值，否则，返回word字符串
+        用途：如果变量未定义则返回默认值
+    ${$string:=word}
+        如果变量名存在且非null,则返回变量值，否则，设置这个变量值为word,并返回其值
+        用途：如果变量未定义，则设置变量默认值，并返回默认值
+    ${$string:?"not defined"}
+        如果变量名存在且非null,返回变量值，否则显示变量名:message,并退出当前脚本
+        用途：用于捕捉由于变量未定义而导致的错误，并退出程序
+    ${$string:+word}
+        如果变量名存在且非null，则返回word,否则，返回null
+        用途：测试变量是否存在
+提示：每个运算符${:}内的冒号都是可选的，如果省略冒号，则定义中的"存在且为非null"部分改为"存在"，也就是说去掉:后的${}仅用于测试变量是否存在
+
+应用：防止变量无值，从根开始删除，rm -f 带路径变量，变量如果为空，也可能出错
+    #path=/server/script
+    find ${path:-/tmp} -type f -name "*.tar.gz" -exec rm -f {} \;
+
+

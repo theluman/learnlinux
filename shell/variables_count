@@ -1,0 +1,77 @@
+变量的数值计算
+常用命令
+$(())，let(bash),expr,bc,$[]
+
+1、$(()) （此方法常用,效率最高，整数运算）不加$符也能运算
+    执行简单的整数运算，只需要将特定的算术表达式用$((" 和 "))
+    ((a=1+2**3-4%3))
+        echo $a
+    b=$((1+2**3-4%3))
+        echo $b
+    echo $((1+2**3-4%3))
+    echo $((a+=1))
+    echo $((a--))
+说明：echo $((a++)和echo $((a--)))表示先输出a前身的值，在进行++或--的运算，a自增了，然后echo输出a的值，a变了，echo $((++a))和echo $((--a))表示先进行++或--运算并输出，然后a自增了，在echo输出a自身的值a就变了
+
+let用法（效率低）,尽量不用遇到系统或者其他用户写的脚本知道是计算即可
+    let 赋值表达式
+    i=2
+    let i=i+8   <==> ((i=i+8))
+    echo $i
+
+expr
+    expr命令一般用于整数值，但也可用于字符串，用来求表达式变量的值，同时expr也是一个手工命令行计数器
+    expr 2 + 2
+提示：运算符左右要有空格，否则不计算
+其他用法：expr ssh-copy-id 脚本
+    if expr "$1" : "*\.pub":then
+    做字符串匹配用
+
+测试各方式的效率差距
+1、
+    chars=`seq -s" " 100`
+    time for i in $(seq 50000);do count=${#chars};done
+
+    [dean@deanarch test]$ time for i in $(seq 50000);do count=${#chars};done
+    real    0m1.162s
+    user    0m1.163s
+    sys 0m0.000s
+    [dean@deanarch test]$ 
+
+2、
+    chars=`seq -s" " 100`
+    time for i in $(seq 50000);do count=`expr length "$chars"`;done
+
+    [dean@deanarch test]$ time for i in $(seq 50000);do count=`expr length "$chars"`;done
+    real    1m32.360s
+    user    0m2.627s
+    sys 0m16.537s
+    [dean@deanarch test]$
+
+3、
+    chars=`seq -s" " 100`
+    time for i in $(seq 50000);do count=`echo ${chars}|wc -L`;done
+
+    [dean@deanarch test]$ time for i in $(seq 50000);do count=`echo ${chars}|wc -L`;done
+    real    5m12.811s
+    user    2m41.320s
+    sys 0m26.597s
+    [dean@deanarch test]$ 
+
+
+结论：一般情况调用外部命令处理，与内置功能操作性能相差较大，尽量要用内置操作完成或函数完成
+
+bc 计算器,bc支持科学计算，可以用于小数计算
+    echo 1+1|bc
+    echo 1+1.1|bc
+    上面用法用到最多
+    seq -s "+" 100|bc
+案例：http://oldboy.blog.51cto.com/2561410/767862
+1加到100的方法15种方法
+
+shell实现杨辉三角的3个实例（第一种为重点）
+http://oldboy.blog.51cto.com/2561410/756234
+
+计算的小结：
+    变量的数值计算常用以下命令：
+    (()),let(bash),expr,bc,$[]，typeset
