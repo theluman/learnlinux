@@ -1,0 +1,37 @@
+当。。。
+直到。。。
+
+while 条件
+    do
+    指令...
+done
+
+while 条件;do
+    指令...
+done
+
+until 条件
+    do
+    指令...
+done
+until应用不多见，了解就好
+
+usleep 微妙
+如何把一个忘了加后台执行的进程暂停并放入后台执行
+sh while.sh
+ctrl-z 暂停
+jobs  查看暂停或运行的的程序
+bg 放入后台执行
+fg是前台继续执行
+
+sh 3.sh & 加&符将程序放入后台执行
+
+sh command &和nohup command &区别
+
+sh 22.sh &  
+    将任务放到后台，即使关闭xshell退出当前session依然继续运行，但标准输出和标准错误信息会丢失（即此方法的输出是输出到当前shell的）
+nohup sh 22.sh  
+    将任务放到后台，关闭标准输入，前台不再能够接收任何输入（标准输入），重定向标准输出和标准错误到当前目录下的文件nohup.out，即使关闭xshell退出当前session依然继续运行。
+nohup sh 22.sh  & 
+    将任务放到后台，但是依然可以使用标准输入，前台能够接收任何输入，重定向标准输出和标准错误到当前目录下的文件nohup.out，即使关闭xshell退出当前session依然继续运行。
+    nohup和&的缺点是，如果你要在一个shell会话里面执行多个命令和脚本，那么要每个命令和脚本都要加nohup和&非常麻烦，所以才有了screen和TMUX

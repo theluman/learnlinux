@@ -1,0 +1,111 @@
+if条件句
+    单分支结构
+        if[条件]
+            then
+                指令
+        fi
+        或
+        if[条件];then
+            指令
+        fi
+    提示 分号;相当于命令换行
+特殊写法:
+if [ -f "$file" ];then echi 1;fi  相当于 [ -f "$file" ] && echo 1
+
+测试文件是否存在比较专业方法：
+法一：
+[dean@deanarch test]$ cat 1.sh 
+#!/bin/sh
+dir=/home/dean/test
+file="1.sh"
+[ ! -d $dir ] && mkdir -p $dir
+if [ -f "$dir/$file" ];then
+    echo "$file is exist."
+    exit
+fi
+[dean@deanarch test]$
+
+关于linux内存，linux有自动缓存功能，不用的内存放入缓存，所有linux的内存剩多少需要看-/+ buffers/cache:         80        916
+916即为linux剩余内存
+
+
+    双分支结构
+    if 条件;then
+        指令集
+    else
+        指令集
+    fi
+
+    多分支结构
+    if 条件;then
+        指令集
+    elif 条件;then
+        指令集
+    else
+        指令
+    fi
+
+可以利用计算判断输入的内容是否为整数
+提示：运维中一般使用的read的方式很少，都是传参方式或变量方式
+
+生产中监控mysql服务的方法：
+1、监控端口方法（似乎是最差的方法）（本地）
+    netstat -lnt|grep 3306|awk -F'[ :]+' '{print $5}'
+    3306可能判断为是字符串
+2、3306端口字符串转成数字（本地）
+    netstat -lnt|grep 3306|wc -l
+3、mysql端口和进程同时存在，认为mysql正常启动（本地）
+    ps -ef|grep mysql|grep -v grep|wc -l >>>进程
+    netstat -lnt|grep 3306|wc -l  >>>端口
+4、模拟web服务器，通过mysql账户链接mysql,然后根据返回命令状态确认mysql是否正常（推荐方法）（分发服务器上监控其他mysql主机，效率不佳）
+    mysql -uroot -p'xianghong379' -S /usr/local/mysql/data/3306/mysql.sock -e "select version();"
+  [ $? -ne 0 ]
+提示如果是异地链接mysql 要添加授权账号及权限，及使用-h ip
+5、最靠谱的方法（监控数据库异常的最佳方法）
+    通过php/java/python等程序脚本url方式监控mysql
+        写好语言脚本，命令行执行，定时执行等
+
+企业服务业务均可使用上述思想解决
+
+时间监控apache nginx 几种方法 视频11,12
+
+web监控手段：
+1、端口（本地户远程）
+2、本地进程
+3、header(http code)
+4、url(wget,curl)
+
+范例1、利用系统函数实现系统脚本启动特殊颜色效果
+    系统函数库
+    # Source function library.
+    . /etc/rc.d/init.d/functions  (和/etc/init.d/functions是同一文件)
+参考 more /etc/init.d/nfs
+
+[dean@6.4-122 test]$cat 1.sh 
+#!/bin/sh
+# Source function library.
+. /etc/rc.d/init.d/functions
+if [ "$1" == "start" ];then
+    action "nginx starting." /bin/true
+elif [ "$1" == "stop" ];then
+    action "nginx is stopped" /bin/false
+fi
+[dean@6.4-122 test]$
+
+如何监控web站点下程序文件是否被篡改，并打印篡改的内容
+1、思路思想更重要，比脚本实现过程重要
+    什么是恶意篡改，只要没经过许可的改动都是篡改
+    工作中先解决问题，在解决好问题
+法一：diff与原始保留文件对比字符串长度
+    只比较了长度，不严谨，但能解决大部分问题
+法二：生产环境用法：利用MD5比较，文件的数字指纹，独一无二的信息值，无论文件名如何体积多大内容如何。都有唯一的md5值
+    md5sum --help
+    先生成指纹库 md5sum /web/* > /mnt/zhiwen.log
+    后期检查文件是否变动过cd /web && md5sum -c /mnt/zhiwen.log
+值得使用的一个思路
+    注意：用MD5目录中都是文件可以执行，目录中在包含目录的可能出错，这时用find 找出目录下文件类型是f的在执行md5sum
+
+企业中一般会对什么文件做指纹验证：
+    1、用户文件，命令文件，配置文件，启动文件等
+    2、日志审计
+

@@ -1,0 +1,49 @@
+小结：if语句是工作中最常用的分之结构
+case结构条件句
+    
+case "字符串变量" in
+值1) 
+    指令1...
+;;
+值2) 
+    指令2...
+;;
+值3) 
+    指令3...
+;;
+*) 
+    指令...
+esac
+
+case常常配合函数一起用
+函数语法：
+
+函数名(){
+    指令
+    return n
+}
+
+规范的语法：
+function 函数名(){
+    指令
+    return n
+}
+
+执行函数，调用函数
+1、直接执行函数名即可，不需要小括号
+2、带参数的函数，函数名 参数1 参数2
+
+函数也可以写成函数库类似 /etc/init.d/functions
+在脚本中先加载即可
+
+利用case语句开发rsync开机启动的脚本 最终结果可以参考/etc/init.d/rpcbind  nfs
+
+如何将脚本加入chkconfig
+脚本中需要如这样两行
+    # chkconfig: - 30 60
+    # description: NFS is a popular protocol for file sharing across networks.
+    #              This service provides NFS server functionality, which is \
+    #              configured via the /etc/exports file.
+    
+其中chkconfig: -是运行级别 可以是2345   30是启动顺序号不能和rc.d中其他重复  60是关闭顺序号，也是不能重复即可
+chkconfig原理就是在做软连接  需要有固定两行才能作为chkconfig对象  vim /etc/init.d/sshd
