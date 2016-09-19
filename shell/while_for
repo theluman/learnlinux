@@ -21,8 +21,8 @@ usleep 微妙
 sh while.sh
 ctrl-z 暂停
 jobs  查看暂停或运行的的程序
-bg 放入后台执行
-fg是前台继续执行
+bg 放入后台执行（只有一个不需要加序号） bg n  
+fg是前台继续执行（只有一个不需要加序号） fg n
 
 sh 3.sh & 加&符将程序放入后台执行
 
@@ -35,3 +35,88 @@ nohup sh 22.sh
 nohup sh 22.sh  & 
     将任务放到后台，但是依然可以使用标准输入，前台能够接收任何输入，重定向标准输出和标准错误到当前目录下的文件nohup.out，即使关闭xshell退出当前session依然继续运行。
     nohup和&的缺点是，如果你要在一个shell会话里面执行多个命令和脚本，那么要每个命令和脚本都要加nohup和&非常麻烦，所以才有了screen和TMUX
+
+提示：while循环如果做计算效率特别低，计算都去用算法计算，公式计算
+    i=1 sum=0
+    while ((i <= 100));do ((sum=sum+i));((i++));done
+    效率低
+
+读入文件内容的三种方式
+1、 按行读入
+    exec < FILE
+    while read line;do
+        cmd
+    done
+2、 按行读入
+    cat ${FILE_PATH} | while read line;do
+        cmd
+    done
+3、按行读入（推荐）
+    while read line;do
+        cmd
+    done < FILE
+
+提示：很多情况脚本用if和for多，使用的while和case情况极少，除非是守护进程用while,启动脚本用case,而且很多while都可以用for替代
+    while循环特长是守护进程，频率小于1分钟的，其他的while循环几乎都可以被for循环替代
+    if语句可以替换case语句，一般在系统启动脚本中传入少量固定规则的字符串用case,其他判断多用if
+    多掌握if,for
+
+for循环语法结构
+第一种：
+for 变量名 in 变量取值列表
+do
+    指令
+done
+提示：此结构中"in 变量取值列表" 可省略，省略相当于in "$@",for i 相当于for i in "$@"
+第二种：
+c语言结构的for循环
+for((exp1;exp2;exp3))
+do
+    指令
+done
+
+seq用法深入
+
+Usage: seq [OPTION]... LAST
+or:  seq [OPTION]... FIRST LAST
+or:  seq [OPTION]... FIRST INCREMENT LAST
+Print numbers from FIRST to LAST, in steps of INCREMENT.
+好用的参数
+-s, --separator=STRING   use STRING to separate numbers (default: \n)
+
+{}序列扩展
+{1..10}
+{a..z}
+
+批量创建用户和密码题目
+固定位随机密码
+echo $RANDOM|md5sum|cut -c 11-18 这也是将位数不一致的随机数弄成一致的方法
+
+产生随机数的6种方法
+1、通过系统环境变量
+    echo $RANDOM
+2、通过openssl
+    openssl rand -base64 8
+    openssl rand -base64 10
+3、通过时间（date）
+    date +%s%N
+4、/dev/random 设备存储着当前系统运行环境的实时数据，可以看做是系统的某个时候唯一的数据，可以作为随机数源数据，通过文件读取方式取得，/dev/urandom 这个设备数据与random一样，只是它是非阻塞的随机数发放器，读取操作不会产生阻塞
+    head /dev/urandom|cksum
+5、UUID是通用唯一识别码，计算机生成的uuid码是唯一的
+    UUID格式：包含32个16进位数字，以‘-’连接号分为五段，形式为8-4-4-4-12的32个字符
+    cat /proc/sys/kernel/random/uuid
+6、yum install expect -y
+    mkpasswd -1 8
+
+break continue exit对比
+用是用于在循环中控制循环的走向
++--------------+------------------------------------------------------------------------------------------+
+|   break n    |n表示跳出循环的层数，如果省略n则跳出整个循环                                              |
++--------------+------------------------------------------------------------------------------------------+
+|   continue n |n表示退到第n层继续循环，如果省略表示跳过本次循环，忽略本次循环的剩余代码，进入下一次循环  |
++--------------+------------------------------------------------------------------------------------------+
+|   exit n     |退出当前shell程序，并返回n,n也可以省略                                                    |
++--------------+------------------------------------------------------------------------------------------+
+|   return     |                                                                                          |
++--------------+------------------------------------------------------------------------------------------+
+

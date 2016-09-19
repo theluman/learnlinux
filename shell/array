@@ -1,0 +1,117 @@
+数组就是相同数据类型的元素按一定顺序排列的集合
+把有限个类型相同的变量用一个名字命名，然后用编号区分他们的变量的集合，这个名字就是数组名，编号就是下表，组成数组的各个变量成为数组的分量，或元素，或下表变量
+
+意义：缩短和简化程序开发，可以利用索引值循环高效处理多种情况
+
+定义：
+array=(value1 value2 value3 value4...)
+abc=(value1 value2 value3...)
+file=($(ls))  比较常用
+
+数组增删改
+
+获取数组长度
+echo ${#array[@]}
+echo ${#array[*]}
+打印数组元素
+echo ${array[0]}
+echo ${array[1]}
+echo ${array[2]}
+echo ${array[*]} 全部元素
+echo ${array[@]} 全部元素
+数组赋值 下标不存在，自动添加一个新的数组元素，下表存在就覆盖值
+array[3]=4
+数组删除 unset[下标] 不带下标清除整个数组
+unset array
+unset array[0]
+数组内容截取和替换（和变量子串的替换很像）
+echo ${array[@]:1:3}
+echo ${array[@]/5/6} echo临时生效，源数组不会修改
+    array1=(${array[@]/5/6})
+
+
+其他数组定义方法
+array=([1]=one [2]=two [3]=three)  key-value键值对
+
+范例一：数组元素列举
+    array=(red green yellow blue magenta)
+    array=(
+        red
+        green
+        yellow
+        blue
+        mageta
+    )
+for ((i=0;i<${#array[*]};i++))
+do
+    echo "This is num $i,the content is $${array[$i]}"
+done
+echo "array len:${#array[*]}"
+
+
+linux系统信号处理
+有些情况下，我们不希望自己的shell脚本被中断，如数据库导入，备份，等等，便有了信号
+
+kill -l [signal]  执行kill -l 可以列出linux系统的信号名称,也可以用trap -l(常用)
+
+[dean@6.4-122 bin]$kill -l
+ 1) SIGHUP   2) SIGINT   3) SIGQUIT  4) SIGILL   5) SIGTRAP
+  6) SIGABRT     7) SIGBUS   8) SIGFPE   9) SIGKILL 10) SIGUSR1
+  11) SIGSEGV   12) SIGUSR2 13) SIGPIPE 14) SIGALRM 15) SIGTERM
+  16) SIGSTKFLT 17) SIGCHLD 18) SIGCONT 19) SIGSTOP 20) SIGTSTP
+  21) SIGTTIN   22) SIGTTOU 23) SIGURG  24) SIGXCPU 25) SIGXFSZ
+  26) SIGVTALRM 27) SIGPROF 28) SIGWINCH    29) SIGIO   30) SIGPWR
+  31) SIGSYS    34) SIGRTMIN    35) SIGRTMIN+1  36) SIGRTMIN+2  37) SIGRTMIN+3
+  38) SIGRTMIN+4    39) SIGRTMIN+5  40) SIGRTMIN+6  41) SIGRTMIN+7  42) SIGRTMIN+8
+  43) SIGRTMIN+9    44) SIGRTMIN+10 45) SIGRTMIN+11 46) SIGRTMIN+12 47) SIGRTMIN+13
+  48) SIGRTMIN+14   49) SIGRTMIN+15 50) SIGRTMAX-14 51) SIGRTMAX-13 52) SIGRTMAX-12
+  53) SIGRTMAX-11   54) SIGRTMAX-10 55) SIGRTMAX-9  56) SIGRTMAX-8  57) SIGRTMAX-7
+  58) SIGRTMAX-6    59) SIGRTMAX-5  60) SIGRTMAX-4  61) SIGRTMAX-3  62) SIGRTMAX-2
+  63) SIGRTMAX-1    64) SIGRTMAX    
+  [dean@6.4-122 bin]$
+
+  一共64个信号，也可以用trap -l(常用)
+
+  关键信号
+  1) SIGHUP
+    本信号在用户终端连接（正常或非正常）结束时发出的，通常在终端控制进程结束时，通知同一session内的各个作业，这时它们不在于控制终端关联
+2) SIGINT
+    程序终止（interrupt）信号，在用户键入intr字符（通常是ctrl+c）时发出
+9) SIGKILL
+20) SIGTSTP 停止进程的运行 通常是ctrl+z发出的信号，暂停脚本执行
+
+通过trap使用信号的方法
+    trap命令用于指定在接收到信号后将要采取的行动，信号的信息trap -l,trap命令的一种常见用途是在脚本程序中断时完成清理工作，历史上，shell总是用数字来代表信号，而新的脚本程序应该使用信号名字，他们在用#include命令包含进来的signal.h头文件中，在使用信号名时需要省略SIG前缀
+    对那些不熟悉信号的人来说，信号是指那些被异步发送到一个程序的事件，默认情况下，他们通常会终止一个程序的运行
+    请记住，脚本程序通常是以从上到下的顺序解释执行的，所以必须在你想保护的那部分代码以前指定trap命令
+    如果要重置某个信号的处理条件到其默认值，只需要简单的将command设置为-。如果要忽略某个信号，就把command设置为空字符串''。一个不带参数的trap命令将列出当前设置的信号及其行动的清单
+    man 7 signal
+重点信号
+
+    HUP(1)  挂起，通常因终端掉线或用户退出引发
+    INT(2)  中断，通常因按下ctrl+c引发
+    QUIT(3) 退出，通常因按下ctrl+/引发
+    ABRT(6) 中止，通常因某些严重的执行错误引发
+    ALRM(14) 报警，通常用来处理超时
+    TERM(15) 终止，通常在系统关机时发送
+    TSTP(20) 停止进程的运行，但该信号可以被处理和忽略，通常是ctrl+z发出的信号我们通常需要忽略的信号有 HUP INT QUIT TSTP TERM 也就是1,2,3,20,15
+trap使用
+trap command signal
+    signal 直接受到的信号，command指接收到信号后采取的行动
+    trap "" 1 2 3 20 15 或 trap "" HUP INT QUIT TSTP
+stty -a 可以列出中断信号与键盘的对应
+
+trap "" 2    屏蔽ctrl+c
+trap ":" 2   恢复ctrl+c
+trap "echo -n 'you are typing ctrl+c'" 2
+
+linux信号的生产应用
+案例1:触发后清理文件
+trap "find /tmp -type f -name "oldboy_*" -mmin +1|xargs rm -f && exit" INT
+案列2：shell跳板机（触发信号后屏蔽信号）
+    方法1：
+        1、首先做好ssh key验证，ssh免密登录
+        2、实现传统的远程连接菜单选择脚本
+        3、利用linux信号防止用户在跳板机上操作
+        4、用户登陆后即调用脚本
+    方法2：root连接服务器，expect每次重新建立ssh key
