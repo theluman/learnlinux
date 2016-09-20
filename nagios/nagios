@@ -1,0 +1,49 @@
+为什么要部署监控系统：
+    军队里的哨兵
+    服务器里的监控
+各种监控软件的优势对比：
+    1、mrtg出流量图，历史趋势图
+    2、nagios专注于报警，也可以配合pnp,cacti,hyperic出图等
+        nagios适合监控大量服务器上面的大批服务是否正常，重点并不在图形化的监控，其集成的很多功能例如报警，都是cacti没有或者很弱的。但是在绘图以及图形塑造方面精细度比cacti要弱,通过插件实现页面管理，nagiosQL
+    3、cacti主要是绘图rrdtool,历史趋势图，通过插件可以实现报警
+        cacti在监控方面有良好的绘图，cacti在流量和图形塑造上要强于nagios，但是在故障分析上逊色，而且报警机制有待完善
+    4、zabbix新生的出图报警软件，有页面管理，出图靠php绘图
+    5、munin专注于历史趋势绘图，图非常细致
+    6、htperic去哪网在用，java开发，java方面擅长，对报警控制比较细
+
+nagios监控工具
+    Nagios 开源 灵活性强 linux系统和类unix系统运行，目前无法在windows上运行，windows可以作为被监控的主机，但不能作为监控服务端
+官方站点 http://www.nagios.org
+快速安装手册 https://assets.nagios.com/downloads/nagioscore/docs/nagioscore/4/en/quickstart.html
+
+Nagios特点：
+    1、监控网络服务（SMTP,POP3,HTTP.TCP,PING等）
+    2、监控主机资源（CPU负载，IO状况，虚拟及正式内存及磁盘利用率等）
+    3、简单的插件设计模式使用户可以方便定制符合自己的服务检测方法
+    4、并行服务检查机制
+    5、具备定义网络分层结构的能力，用“parent”主机定义来表达网络主机间的关系，这种关系可以被用来发现和明晰主机宕机或不可达的状态
+    6、当服务器或主机问题产生于解决时将告警发送给联系人（mail,im,sms,sound）
+    7、具备定义事件句柄功能，它可以在主机或服务的事件发生时获取更多的问题定位
+    8、自动的日志回滚
+    9、可以支持并实现对主机的冗余监控(分布式监控)
+    10、可选的web界面用于查看当前的网络状态、通知和故障历史，日志文件等
+Nagios监控一般一个主程序（Nagios）,一个插件程序（Nagios-plugins）和几个可选的附加程序（NRPE,NSClient++,NSCA,NDOUtils）。Nagios的具体监控工作都是通过插件（也可以自己编写插件）实现的，因此，Nagios和Nagios-plugins是Nagios服务端必须的程序组件，Nagios-plugins一般也要安装于被监控端。几个附加程：
+    1、NRPE
+        位置：客户端
+        用来在被监控的远程主机上执行脚本插件以实现对这些主机资源的监控，此软件工作于被监控端
+    2、NSClient++
+        位置：windows的客户端
+        用来监控windows主机时安装在windows主机上的组件，相当于linux下的NRPE
+    3、NDOUtils（不推荐用）
+        位置：服务端
+        用来将Nagios的配置信息和个event产生的数据存入数据库，以实现对这些数据的检索和处理。NDOUtils工作于服务器端
+    4、NSCA(大规模集群，500台以上)
+        位置：服务端客户端都要装
+        用来让被监控的远程主机主动将监控信息发送给Nagios(在分布式监控集群模式中要用到)，NSCA需要同时安装在nagios的服务端和客户端
+
+nagios监控系统及家族成员（外部构建）
+1、NRPE/NSclient++ 运行原理
+    Monitoring Host(服务端)             Remote Linux Host
+Nagios-->check_nrpe----------通过ssl------->NRPE----->check_disk(check_load)------>local_resource and service
+
+化繁为简是一个优秀的运维工程师必须要掌握的一个重要思想

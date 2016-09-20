@@ -1,0 +1,223 @@
+第一部分  nagios服务端安装
+
+1、准备3台服务器或虚拟机
++--------------+-----------------+----------------------+
+|   IP         |    角色         |  备注                |
++--------------+-----------------+----------------------+
+|192.168.1.121 |nagios监控服务器 |                      |
++--------------+-----------------+----------------------+
+|192.168.1.122 |Lamp服务器       |被监控的客户端服务器  |
++--------------+-----------------+----------------------+
+|192.168.1.123 |Lnmp服务器       |被监控的客户端服务器  |
++--------------+-----------------+----------------------+
+
+2、设置yum安装源（一般换国内的163啊Sohu的的源）
+
+#3、解决perl编译问题
+# echo 'export LC_ALL="C"' >> /etc/profile
+# tail -1 /etc/profile
+# source /etc/profile
+# echo $LC_ALL
+# cd ~
+
+4、处理iptables防火墙和selinux
+    iptables 测试环境关闭，生产环境开启防火墙，允许nagios服务通过防火墙即可
+    selinux 关闭
+        关闭iptables
+          sudo /etc/init.d/iptables status
+          sudo /etc/init.d/iptables stop
+        关于关闭selinux
+        1、sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+        2、setenforce 0  设置
+            getenforce 查看
+                Permissive   <---会警告单不会阻止，也是关掉了selinux
+
+5、解决系统时间同步问题（非常重要）
+    sudo /usr/sbin/ntpdate pool.ntp.org
+    sudo su -
+    echo '#time sync by dean at 20160920' >> /var/spool/cron/root
+    echo '*/10 * * * * /usr/sbin/ntpdate pool.ntp.org >/dev/null 2>&1' >> /var/spool/cron/root
+    crontab -l
+
+6、安装nagios软件包
+    1、准备环境包
+    yum install gcc glibc glibc-common -y  <====编译软件包
+    yum install gd gd-devel -y   <===用于后面pnp出图的包
+    yum install mysql* -y(非必须，如果有数据库，那么需要先装mysql,否则mysql相关插件不会被安装)
+    yum install httpd php php-gd -y  <====apache环境
+
+扩展：  1、yum下载的rpm包默认路径/var/cache/yum/base/packages
+        2、设置yum本地保留下载的rpm包，方法
+            vi /etc/yum.conf 把keepcache=o修改为keepcache=1,表示下载的包不清除
+
+7、创建nagios需要的用户及组
+    sudo useradd nagios(这个地方创建家目录，否则启动nagios会提醒没有家目录)
+    #sudo useradd apache
+        yum安装httpd apache存在，如果编译安装的apache，默认apache用户为daemon,此时需执行 usermod -a -G nagcmd daemon
+    sudo groupadd nagcmd
+    sudo usermod -a -G nagcmd nagios
+    sudo usermod -a -G nagcmd apache
+    id -n -G nagios   (或groups nagios)
+    id -n -G apache   (或groups apache)
+
+8、下载安装nagios系列软件
+    midir ~/tools
+    cd ~/tools
+    nagios主程序
+    wget http://prdownloads.sourceforge.net/sourceforge/nagios/nagios-4.0.8.tar.gz
+    nagios插件包
+    wget http://www.nagios-plugins.org/download/nagios-plugins-2.0.3.tar.gz
+    nrpe 客户端软件,服务端也要安装
+    wget https://github.com/NagiosEnterprises/nrpe/archive/3.0.1.tar.gz
+    老男孩装了iostat插件 不知道做啥用
+    check_iostat
+    检测内存的插件
+    check_memory.pl
+    检测mysql插件
+    check_mysql  可以不用
+    出图相关的
+    libart_lgpl-2.3.17.tar.gz 相关库
+    pnp-0.4.14  web绘图软件
+    rrdtool-1.2.14 实际绘图软件，被pnp调用
+
+9、启动一下lamp环境的apache服务,确定启动成功
+    /etc/init.d/httpd start
+    lsof -i tcp:80
+[dean@6.4-121ns tools]$sudo lsof -i tcp:80
+COMMAND  PID   USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+httpd   2011   root    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2013 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2014 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2015 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2016 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2017 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2018 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2019 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+httpd   2020 apache    4u  IPv6  36223      0t0  TCP *:http (LISTEN)
+[dean@6.4-121ns tools]$
+    apache设置开机启动
+    sudo chkconfig httpd on
+10、解压缩ngaios软件包并安装
+    tar xf nagios-4.0.8.tar.gz
+    cd nagios-4.0.8.tar.gz
+    sudo ./configure --with-command-group=nagcmd
+        如果是编译安装的httpd,可以执行sudo ./configure --with-command-group=nagcmd --with-httpd-conf=/usr/local/apache2/conf/extra 增加一个编译参数指定编译nagios web 配置生成的路径
+    sudo make all
+    sudo make install
+    sudo make install-init  <===增加nagios启动脚本
+    sudo make install-config <===生成配置文件样例
+    sudo make install-commandmode <===为nagcmd组设置权限使用某些命令
+
+You can continue with installing Nagios as follows (type 'make'
+without any arguments for a list of all possible options):
+
+  make install-init
+       - This installs the init script in /etc/rc.d/init.d
+
+         make install-commandmode
+              - This installs and configures permissions on the
+                     directory for holding the external command file
+
+                       make install-config
+                            - This installs sample config files in /usr/local/nagios/etc
+
+11、安装nagios web配置文件及创建登录用户
+    安装nagios web配置文件
+    sudo make install-webconf
+        [dean@6.4-121ns nagios-4.0.8]$sudo make install-webconf
+        [sudo] password for dean: 
+        /usr/bin/install -c -m 644 sample-config/httpd.conf /etc/httpd/conf.d/nagios.conf
+
+        *** Nagios/Apache conf file installed ***
+
+        [dean@6.4-121ns nagios-4.0.8]$
+    如果是编译安装的apache 配置文件路径见图47
+    现在如果重启httpd,nagios界面就能打开了 http://localhost/nagios,只是需要用户名密码才能登录
+
+    创建nagios web 监控界面的登入需要的用户名及密码
+       sudo htpasswd -c /usr/local/nagios/etc/htpasswd.users nagiosadmin
+       cat /usr/local/nagios/etc/htpasswd.users
+
+    重启httpd(apache)
+    sudo /etc/init.d/httpd restart
+
+12、添加监控报警的接受email地址
+    vim /usr/local/nagios/etc/objects/contacts.cfg +35
+
+13、开启sendmail
+    因为linux默认发邮件是sendmail，可以调整默认为别的软件
+    centos6.0以上默认postfox 随系统启动
+    #sudo /etc/init.d/sendmail start
+    #sendmail开机启动
+    #sudo chkconfig sendmail on
+    #netstat -lnt|grep 25
+    #如果sendmail启动比较慢，查看主机名一致性
+http://ip/nagios
+
+14、安装服务端nagios插件
+    cd ~/tools
+    tar xf nagios-plugins-2.0.3.tar.gz
+    cd nagios-plugins-2.0.3
+    sudo ./configure --with-nagios-user=nagios --with-nagios-group=nagios --enable-perl-modules
+    sudo make
+        make遇到错误，如果是编译mysql有可能找不到mysql路径，解决办法是configure中加入 --with-mysql=/usr/local/mysql解决
+            make: *** [all] Error 2
+        我的测试报错信息是
+        make[3]: Entering directory `/home/dean/tools/nagios-plugins-2.0.3/perlmods/Test-Simple-0.98'
+        make[3]: *** No targets specified and no makefile found.  Stop.
+        make[3]: Leaving directory `/home/dean/tools/nagios-plugins-2.0.3/perlmods/Test-Simple-0.98'
+        Can't run make. Please
+            rm -rf /home/dean/tools/nagios-plugins-2.0.3/perlmods/Test-Simple-0.98
+            to remake from this point) at ../tools/build_perl_modules line 235.
+            make[2]: *** [all-local] Error 2
+            make[2]: Leaving directory `/home/dean/tools/nagios-plugins-2.0.3/perlmods'
+            make[1]: *** [all-recursive] Error 1
+            make[1]: Leaving directory `/home/dean/tools/nagios-plugins-2.0.3'
+            make: *** [all] Error 2
+        是因为没有安装perl 不能使用perl模块configure
+        yum install perl perl-devel -y
+        执行 make clean all
+        重新configure 和make
+    sudo make install
+    cd ../
+    检查一下插件目录一共有多少个插件：
+    ls /usr/local/nagios/libexec/|wc -l
+
+15、nagios服务添加成开机自启动
+    chkconfig --add nagios
+    chkconfig nagios on
+    chkconfig nagios --list
+16、检查nagios语法
+    /usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+17、启动nagios
+    /etc/init.d/nagios start
+    ps -ef|grep nagios
+http://ip/nagios
+
+18、如果服务端有了nrpe插件ls /usr/local/nagios/libexec/check_nrpe就不用安装了，没有的话需要安装nrpe
+
+安装nrpe
+    cd ~/tools
+    tar xf nrpe-3.0.1.tar.gz
+    cd nrpe-3.0.1
+    sudo ./configure
+       [dean@6.4-121ns nrpe-3.0.1]$make
+
+       Please enter make [option] where [option] is one of:
+            all                  builds nrpe and check_nrpe
+            nrpe                 builds nrpe only
+            check_nrpe           builds check_nrpe only
+            install-groups-users add the users and groups if they do not exist
+            install              install nrpe and check_nrpe
+            install-plugin       install the check_nrpe plugin
+            install-daemon       install the nrpe daemon
+            install-config       install the nrpe configuration file
+            install-inetd        install the startup files for inetd, launchd, etc.
+            install-init         install the startup files for init, systemd, etc.
+
+
+    sudo make all
+    sudo make install
+    sudo make install-plugin
+    sudo make install-daemon
+    sudo make install-config
