@@ -1,0 +1,225 @@
+iptables：
+
+    iptables是unix，linux下自带的入和流出服务器的数据包进行很精细的控制，特别是它可以再一台非常低的硬件配置下跑的非常好
+    iptables主要工作在osi七层的二(数据链路层)，三（网络层），四层（传输层），如果重新编译内核，也可以支持7层控制
+
+名词术语：
+容器：容器是装东西的，如箱子，包，iptables里容器就是用来描述包含或者说属于的关系
+
+Netfilter:Netfilter是表（tables）的容器，如果把Netfilter看成是某小区的一栋楼，那么表（tables）就是楼里的其中一套房，这套房子（表tables）属于这栋楼（Netfilter）
+
+表（tables）:表（tables）是链的容器，即所有的链（chains）都属于其对应的表（tables），如果把Netfilter看成某小区的一栋楼，那么表（tables）就是楼里一套房子
+
+链（chains）:链（chains）是规则（Policys）的容器，如果把表（tables）当作是一套房子，那么链就是房子里的家具比如柜子
+
+规则（Policys）:规则（Policys）,就是iptables一系列过滤信息的规范和具体方法，可以理解为柜子里如何增加和摆放柜子等的规定
+
+netfilter       表tables        链chains        规则policys
+一栋楼      楼道里的房子        房子里的柜子        柜子里衣服的摆放规则
+
+iptables工作流程：iptables采用的是数据包过滤机制，所以它会对请求的数据包的包头数据进行分析，并根据我们预设的规则进行匹配来决定是否可以进入主机
+
+client请求数据--------->iptables filter----------------->通过，获取主机service
+                            |
+                            |
+                        开始过滤  
+                            |
+                            |
+                拒绝<-----规则1
+                            |
+                            |
+                          规则2---------------------------->通过
+                            |
+                            |
+                            |
+            拒绝----- 默认数据规则----------------------->通过
+                        ......
+
+规则从上到下过滤，第一条通过，不在检测后面规则，相反，第一条拒绝，也不再检测后面规则，如果前面都没有规则说让不让进，去匹配默认规则
+
+小结，
+1.防火墙是层层过滤的，实际按照规则的顺序从上到下，从前到后进行过滤
+2.如果匹配规则明确表明是阻止还是通过的，数据包就不在向下匹配新规则
+3.如果规则中没有明确的，也就是没有规则的，一直向下匹配直到默认规则并得到明确的允许还是通过
+4.默认规则是所有规则执行完才会执行的
+
+iptables的表tables和链chains
+默认情况下，iptables根据功能和表的定义划分包含三张表，filter,net,mangle,其中每个表又包含了不同的操作链chains
+查看帮助有4张表，但另一张已经不用了
+  INPUT FORWARD INPUT INPUT PREROUTING POSTROUTING  这些都是链，链的名字必须大写
+
+filter  INPUT 有 |FORWARD(转发，流经防火墙) 有|OUTPUT
+有|PREROUTING（流经防火墙之前） 无|POSTROUTING(数据包离开防火墙之前) 无
+
+nat INPUT 无|FORWARD 无|OUTPUT 有|PREROUTING 有|POSTROUTING 有
+
+mangle  都有
+
+filter nat常用
+
+详解
+filter表：主要和主机自身有关，真正负责主机防火墙功能（过滤流入流出主机的数据包，是iptables默认使用的表，这个表定义了INOUT FORWARD OUTPUT三个链）
+    INPUT 过滤所有目标地址是本机地址的数据包，通俗的讲就是过滤流入主机的数据包
+    FORWARD 负责转发流经主机的数据包，其转发作用，和Nat关系很大
+    OUTPUT 处理所有源地址是本机的数据包，通俗讲，就是流出主机发送出去的数据包
+
+强调：对于filter 表的控制是我们实现本机防火墙的重要手段，和交换机的acl类似
+
+nat表：负责网络地址转换，即来源与目的ip地址和port的转换。应用：和主机本身无关，一般用于局域网共享上网或者特殊的端口转换服务。一般工作场景用于做路由或网关，还做内部外部ip地址一一映射，也包括端口的映射 这个表定义了三个链（OUTPUT PREROUTING POSTROUTING）
+
+    OUTPUT 和主机发出去的数据包有关，改变主机发出数据包的目标地址
+    PREROUTING
+    在数据到达防火墙时进行路由判断之前的执行的规则，作用是改变数据包的目的地址、目的端口等。通俗讲就是收信时，根据规则重写收件人的地址，例如把公网ip
+    124.42.60.113映射到局域网的10.0.0.19服务器上，还可以把80端口转为局域网的服务器上的9000端口
+
+    POSTROUTING
+    再数据包离开防火墙时进行路由判断之后执行的规则，作用改变数据的原地址，源端口，通俗说就是寄信时，写好发件人地址，要让人家回信时能有地址可回，例如：我们笔记本和虚拟家都是10.0.0.0/24，就是出网时候被我们企业路由器把原地址改成了公网地址了，生产应用：局域网共享上网
+    mangle
+    主要负责修改数据中的特殊标记，如TTL,TOS,MARK等，这个表定义了5个链，由于这个表遇特殊标记有关，一般情况下，用不到这个mangle表
+
+
+数据包流向：
+简化mangle表后
+
+1.数据只是流经服务器
+数据包-->nat_PREROUTING-->filter_FORWARD-->nat_POSTROUTING
+
+2.数据进服务器
+数据包-->nat_PREROUTING-->filter_INPUT-->nat_OUTPUT-->filter_OUTPUT-->nat_POSTROUTING
+
+1号线：主要是nat功能，应用：局域网上网，外部ip和端口映射为内部ip和端口
+2号线：主要是filter功能，即防火墙功能，应用：主要应用就是服务器防火墙
+
+iptables命令
+iptables --help
+iptables -V
+
+iptables -[AD] chain rule-specification [options]
+iptables -I chain [rulenum] rule-specification [options]
+iptables -R chain rulenum rule-specification [options]
+iptables -D chain rulenum [options]
+iptables -[LS] [chain [rulenum]] [options]
+iptables -[FZ] [chain] [options]
+iptables -[NX] chain
+iptables -E old-chain-name new-chain-name
+iptables -P chain target [options]
+iptables -h (print this help information)
+
+-A 添加  --append
+-D 删除  --delete
+-R 替换  --replace
+-L 列表查看  --list
+-n 数字方式查看
+    一般iptables -L -n
+-F [clain]清除所有链里的规则 --flush
+-t 针对其他表操作 --table
+-X [clain] 清除用户自定义的链
+-Z [chain [rulenum]] Zero counters in chain or all chains ,链的计数器清零
+centos 6.4
+1、开启iptables
+ /etc/init.d/iptables start
+起不来 setup-->Firewall configuration--->enable
+
+/etc/init.d/iptables status 或者 iptables -L -n
+默认看到的是filter表和链的默认规则
+
+2、清除默认的规则,针对filter表，链还存在
+iptables -F 清除默认规则（变成全部允许了）
+iptables -X 清除用户自定义的链
+iptables -Z 清除链的计数器
+iptables -L -n
+iptables -L -n -t nat 查看nat表
+
+[options]
+-p [tcp|udp|..]
+--dport [22|..] 数据包目标端口
+-j  处理动作
+    DROP 接受
+    ACCEPT 丢弃
+    REJECT 拒绝
+DROP好于REJECT
+-s 源地址
+-i eth0 网卡接口
+
+3、禁止端口
+#禁止ssh端口
+（1）找出当前机器ssh端口，默认22
+    netstat -lntup|grep ssh
+（2）禁止当前ssh默认的22端口
+    iptables [-t table] -[AD] chain rule-specification [options]
+    iptables -t filter -A INPUT -p tcp --dport 22 -j DROP 添加规则
+    iptables -t filter -D INPUT -p tcp --dport 22 -j DROP 清除规则
+    （立即生效，但仅在内存临时生效，非永久）
+配防火墙特别容易把自己的挡在外面，再配防火墙时，先写一个定义任务脚本，每5分钟关闭防火墙
+
+#80 3306 等等
+
+-I和-A的区别
+-A 添加规则，但是-A把规则添加到链的结尾
+-I 添加规则，-I是把规则添加到链的开头
+企业环境下-I,-A用途：
+    企业里有的时候默认规则是允许的，比如80端口，如果遇到恶意流量攻击，单ip瞬时流超大，需要禁止此ip访问的时候，就需要用-I
+    iptables -I INPUT -p tcp -s 10.0.0.108 --dport 80 -j DROP
+此处可以写脚本分析流量日志自动实行DROP
+
+iptables -L -n --line-numbers 查看规则号
+-D 完整输入规则可以删除
+-D 直接指定序号删除
+    iptable -D INPUT 1
+再其他规则中间插入规则，利用规则号
+    iptables -I INPUT 4 -p tcp -s 10.0.0.108 --dport 80 -j DROP
+    （4表示插入的规则的位置）
+总结下删除规则的方法：
+iptables -D INPUT -p tcp --dport 8080 -j DROP
+iptables -F
+iptables -D INPUT 5
+/etc/init.d/iptables restart
+
+禁止10.0.0.0网段连入
+iptables -t filter -A INPUT -i eth0 -s 10.0.0.0/24 -j DROP
+iptables -A INPUT -p all -i eth0 -s 10.0.0.0/24 -j DROP  all-->tcp udp icmp
+iptables -t filter -A INPUT -i eth0 ! -s 10.0.0.0/24 -j DROP  禁止网段
+iptables -t filter -A INPUT -i eth0 ! -s 10.0.0.116 -j DROP
+禁止网段，放行自己的或某个ip
+
+iptables -t filter -A INPUT -p icmp --icmp-type 8 -i eth0 ! -s 192.168.1.179 -j
+DROP 禁ping
+
+企业工作中ssh链接问题
+1.默认谁也不能连，开一个vpn服务，拨号到某一台vpn服务器上，然后vpn的内网地址去访问内部机器
+2.前端对外提供服务的机器ssh端口都做禁止外部ip访问限制，可以开启后端或者不对外提供服务的机器，保留ssh服务（更改root和ssh端口），平时就先链接此机器，再去连其他机器
+3.流量特别大的外网机器，不要开防火墙，会影响性能，购买硬件防火墙
+
+-p指定协议
+-p tcp
+-p udp
+-p icmp
+-p all
+
+--dport 目的端口
+--spodt 源端口
+
+--dport 22:80  匹配端口范围
+
+匹配接口
+-i
+-o
+
+-m 匹配网络状态
+
+-m limit 数值数据包的速率
+
+企业生产环境配置防火墙-手动执行
+
+生产环境配置主机防火墙的两种模式
+逛公园和看电影两种
+
+逛公园：默认随便进出，对非法分子拒绝，应用：配置网关
+看电影：默认没票进不去，花钱买票才能看电影，应用：主机防火墙
+
+
+
+
+
+
+

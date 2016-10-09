@@ -1,0 +1,14 @@
+nagios客户端安装
+相比服务端，客户端无需安装lamp环境，无需安装nagios主程序包
+需要安装nagios-plugin 插件包 需要安装nrpe 
+无需
+    yum install gd gd-devel -y
+    yum install httpd php php-gd -y
+    yum install mysql* -y (如果不安装mysql，插件包就不会安装check_mysql,按自己需求决定)
+1、配置网络环境，安装国内yum源（可选）
+2、处理防火墙，selinux
+3、解决时间同步问题
+4、安装编译环境
+    yum install gcc glibc glibc-common -y
+5、安装nagios-plugin nagios插件包
+    
